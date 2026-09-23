@@ -1,0 +1,52 @@
+{
+  "name": "Action",
+  "type": "object",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "opportunity_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "requires_approval": {
+      "type": "boolean",
+      "default": true
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "is_demo": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "type",
+    "status"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

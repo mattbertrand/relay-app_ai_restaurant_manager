@@ -1,0 +1,81 @@
+{
+  "name": "Opportunity",
+  "type": "object",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_email": {
+      "type": "string"
+    },
+    "customer_phone": {
+      "type": "string"
+    },
+    "estimated_value_min": {
+      "type": "number"
+    },
+    "estimated_value_max": {
+      "type": "number"
+    },
+    "priority": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "recommended_action": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "original_message": {
+      "type": "string"
+    },
+    "why_identified": {
+      "type": "string"
+    },
+    "draft_response": {
+      "type": "string"
+    },
+    "is_demo": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "type",
+    "title",
+    "status"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

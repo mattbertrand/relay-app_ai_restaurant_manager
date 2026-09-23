@@ -1,0 +1,9 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    }
+  }
+}
