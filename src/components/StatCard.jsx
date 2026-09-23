@@ -22,7 +22,7 @@ export default function StatCard({ icon: Icon, label, value, sublabel, accent = 
         <span className="text-sm font-medium text-muted-foreground">{label}</span>
         {Icon && (
           <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", iconBg[accent])}>
-            <Icon className={cn("w-4.5 h-4.5", accents[accent])} />
+            <Icon className={cn("w-5 h-5", accents[accent])} />
           </div>
         )}
       </div>

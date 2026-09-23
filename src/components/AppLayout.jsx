@@ -55,7 +55,7 @@ export default function AppLayout() {
                   active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <Icon className="w-4.5 h-4.5" />
+                <Icon className="w-5 h-5" />
                 {item.label}
               </Link>
             );
@@ -121,7 +121,7 @@ export default function AppLayout() {
                       active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
                     )}
                   >
-                    <Icon className="w-4.5 h-4.5" />
+                    <Icon className="w-5 h-5" />
                     {item.label}
                   </Link>
                 );
