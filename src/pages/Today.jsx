@@ -59,9 +59,9 @@ export default function Today() {
   );
   const followUpsNeeded = needsAttention.length;
   const completedActions = (actions || []).filter((a) => a.status === "Completed").length;
-  const estRevenue = (opportunities || [])
-    .filter((o) => o.status !== "Dismissed")
-    .reduce((sum, o) => sum + (o.estimated_value_max || 0), 0);
+  const activeOpps = (opportunities || []).filter((o) => o.status !== "Dismissed");
+  const potentialMin = activeOpps.reduce((sum, o) => sum + (o.estimated_value_min || 0), 0);
+  const potentialMax = activeOpps.reduce((sum, o) => sum + (o.estimated_value_max || 0), 0);
 
   const hasDemo = (opportunities || []).some((o) => o.is_demo);
 
@@ -78,7 +78,7 @@ export default function Today() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
         <StatCard icon={Target} label="Opportunities Found" value={opportunities?.length || 0} accent="primary" />
         <StatCard icon={Bell} label="Follow-ups Needed" value={followUpsNeeded} accent="accent" />
-        <StatCard icon={DollarSign} label="Est. Revenue Opportunities" value={formatValueRange(0, estRevenue)} accent="emerald" />
+        <StatCard icon={DollarSign} label="Potential Value" value={formatValueRange(potentialMin, potentialMax)} accent="emerald" />
         <StatCard icon={CheckCircle2} label="Completed Actions" value={completedActions} accent="blue" />
       </div>
 

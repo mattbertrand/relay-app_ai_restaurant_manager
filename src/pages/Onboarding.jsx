@@ -88,7 +88,7 @@ export default function Onboarding() {
       const demoActions = generateDemoActions(restaurant.id, oppIds);
       await base44.entities.Action.bulkCreate(demoActions);
 
-      const demoActivities = generateDemoActivities(restaurant.id);
+      const demoActivities = generateDemoActivities(restaurant.id, oppIds);
       await base44.entities.Activity.bulkCreate(demoActivities);
 
       // 4. Hard redirect so auth context picks up the new restaurant_id

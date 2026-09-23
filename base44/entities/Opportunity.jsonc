@@ -29,10 +29,33 @@
     "estimated_value_max": {
       "type": "number"
     },
+    "value_confidence": {
+      "type": "string",
+      "enum": [
+        "High",
+        "Medium",
+        "Low"
+      ]
+    },
+    "value_basis": {
+      "type": "string",
+      "description": "Short explanation of how the potential value was estimated, e.g. 'Estimate based on 80 guests x $18-$30 per person.'"
+    },
     "priority": {
       "type": "string"
     },
     "status": {
+      "type": "string"
+    },
+    "draft_status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Edited",
+        "Approved"
+      ]
+    },
+    "dismiss_reason": {
       "type": "string"
     },
     "recommended_action": {

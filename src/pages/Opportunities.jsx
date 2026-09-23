@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import StatusBadge from "@/components/StatusBadge";
 import PriorityBadge from "@/components/PriorityBadge";
+import ValueConfidenceBadge from "@/components/ValueConfidenceBadge";
 import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
 import { formatValueRange, timeAgo } from "@/lib/format";
@@ -109,6 +110,7 @@ export default function Opportunities() {
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">{opp.type}</span>
                     <PriorityBadge priority={opp.priority} />
+                    <ValueConfidenceBadge confidence={opp.value_confidence} />
                     <span className="text-xs text-muted-foreground">{opp.source}</span>
                   </div>
                   <h3 className="font-medium text-foreground text-sm md:text-base">{opp.title}</h3>

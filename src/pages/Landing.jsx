@@ -30,7 +30,7 @@ const BENEFITS = [
 ];
 
 const EXAMPLES = [
-  { type: "Catering inquiry", desc: "Customer is asking about catering for approximately 80 people.", value: "$1,500–$2,500", status: "Needs Review" },
+  { type: "Catering inquiry", desc: "Customer is asking about catering for approximately 80 people.", value: "$1,500–$2,500 · Medium confidence", status: "Needs Review" },
   { type: "Private event inquiry", desc: "Customer wants to book the patio for a birthday celebration.", value: "$2,000–$3,000", status: "Needs Response" },
   { type: "Unanswered inquiry", desc: "Customer asked about patio availability 3 days ago — no response yet.", value: "$800–$1,500", status: "Needs Response" },
 ];
@@ -161,7 +161,7 @@ export default function Landing() {
                   <p className="text-sm text-foreground">{ex.desc}</p>
                 </div>
                 <div className="sm:text-right">
-                  <div className="text-xs text-muted-foreground">Est. value</div>
+                  <div className="text-xs text-muted-foreground">Potential value</div>
                   <div className="font-heading text-lg font-semibold text-foreground">{ex.value}</div>
                 </div>
               </div>
@@ -184,7 +184,7 @@ export default function Landing() {
               {[
                 { label: "Opportunities Found", value: "6", icon: TrendingUp },
                 { label: "Follow-ups Needed", value: "3", icon: Bell },
-                { label: "Est. Revenue", value: "$8.4K", icon: Zap },
+                { label: "Potential Value", value: "$8.4K", icon: Zap },
                 { label: "Actions Done", value: "2", icon: CheckCircle2 },
               ].map((s, i) => (
                 <div key={i} className="bg-secondary/50 rounded-xl p-4">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
+import { approveResponse } from "@/lib/opportunityActions";
 import StatusBadge from "@/components/StatusBadge";
 import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
@@ -48,6 +49,16 @@ export default function Actions() {
   const updateAction = async (action, newStatus) => {
     setBusy(action.id);
     try {
+      // Approving a draft response is the same approval workflow as the
+      // opportunity page — keep the underlying data consistent.
+      if (newStatus === "Completed" && action.type === "Draft response" && action.opportunity_id) {
+        const opp = oppMap[action.opportunity_id];
+        if (opp) {
+          await approveResponse(opp);
+          loadData();
+          return;
+        }
+      }
       const updates = { status: newStatus };
       if (newStatus === "Completed") updates.completed_at = new Date().toISOString();
       await base44.entities.Action.update(action.id, updates);
