@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Mail, Loader2, RefreshCw, XCircle, FlaskConical, Check } from "lucide-react";
+import { Mail, Loader2, RefreshCw, RefreshCcw, XCircle, FlaskConical, Check } from "lucide-react";
 
 const GMAIL_CONNECTOR_ID = "6ab4c39dd81d1c8bc44d5db3";
 
@@ -27,6 +27,27 @@ function summaryText(summary) {
   return parts.join(" · ") + ".";
 }
 
+function reprocessText(summary) {
+  if (!summary) return "";
+  const parts = [];
+  const n = summary.reprocessed || 0;
+  if (n) parts.push(`${n} conversation${n === 1 ? "" : "s"} re-analyzed`);
+  if (summary.opportunitiesCreated) {
+    parts.push(
+      `${summary.opportunitiesCreated} new opportunit${summary.opportunitiesCreated === 1 ? "y" : "ies"}`
+    );
+  }
+  if (summary.opportunitiesUpdated) parts.push(`${summary.opportunitiesUpdated} updated`);
+  if (summary.attentionFlagged) parts.push(`${summary.attentionFlagged} flagged for attention`);
+  if (summary.opportunitiesRemoved) {
+    parts.push(
+      `${summary.opportunitiesRemoved} outdated draft${summary.opportunitiesRemoved === 1 ? "" : "s"} removed`
+    );
+  }
+  if (summary.needsReview) parts.push(`${summary.needsReview} need review`);
+  return parts.length ? parts.join(" · ") + "." : "No conversations to re-analyze.";
+}
+
 export default function GmailIntegrationCard() {
   const [status, setStatus] = useState(null);
   const [connecting, setConnecting] = useState(false);
@@ -35,6 +56,8 @@ export default function GmailIntegrationCard() {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState(null);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [reanalyzeSummary, setReanalyzeSummary] = useState(null);
 
   const checkStatus = useCallback(async () => {
     try {
@@ -96,6 +119,19 @@ export default function GmailIntegrationCard() {
     }
   };
 
+  const runReanalyze = async () => {
+    setReanalyzing(true);
+    setReanalyzeSummary(null);
+    try {
+      const res = await base44.functions.invoke("gmailReprocess", {});
+      setReanalyzeSummary(res.data);
+    } catch (err) {
+      setReanalyzeSummary({ error: `Re-analysis failed: ${errorDetail(err)}` });
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
   const runTests = async () => {
     setTesting(true);
     setTestResults(null);
@@ -147,6 +183,22 @@ export default function GmailIntegrationCard() {
                   </>
                 )}
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={runReanalyze}
+                disabled={reanalyzing || syncing}
+              >
+                {reanalyzing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Re-analyzing…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCcw className="w-3.5 h-3.5 mr-1.5" /> Re-analyze inbox
+                  </>
+                )}
+              </Button>
               {!confirmDisconnect ? (
                 <Button
                   size="sm"
@@ -178,6 +230,17 @@ export default function GmailIntegrationCard() {
           )}
           {syncSummary && !syncSummary.error && syncSummary.connected !== false && (
             <p className="text-xs text-muted-foreground mt-2">{summaryText(syncSummary)}</p>
+          )}
+          {reanalyzeSummary && reanalyzeSummary.error && (
+            <p className="text-xs text-destructive mt-2">{reanalyzeSummary.error}</p>
+          )}
+          {reanalyzeSummary && !reanalyzeSummary.error && reanalyzeSummary.connected === false && (
+            <p className="text-xs text-amber-600 mt-2">
+              Gmail is not connected. Reconnect to re-analyze your inbox.
+            </p>
+          )}
+          {reanalyzeSummary && !reanalyzeSummary.error && reanalyzeSummary.connected !== false && (
+            <p className="text-xs text-muted-foreground mt-2">{reprocessText(reanalyzeSummary)}</p>
           )}
 
           {!connected && (

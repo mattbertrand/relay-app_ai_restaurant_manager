@@ -57,7 +57,6 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       continue;
     }
     summary.reprocessed++;
-    console.log("[reprocess]", convo.subject, "->", analysis.classification, analysis.category || "");
 
     const linkedOpp = convo.opportunity_id ? await findOpportunity(base44, convo.opportunity_id) : null;
     const untouchedDraft =
@@ -136,7 +135,6 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       }
       const outcome = conversationOutcomeFor(classification);
       await base44.entities.Conversation.update(convo.id, outcome);
-      console.log("[reprocess] wrote", JSON.stringify(outcome));
       if (classification === "attention") summary.attentionFlagged++;
       await base44.entities.Activity.create({
         restaurant_id: restaurantId,
