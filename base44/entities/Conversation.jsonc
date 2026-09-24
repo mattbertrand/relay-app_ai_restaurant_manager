@@ -42,6 +42,9 @@
         "Not analyzed",
         "No opportunity",
         "Opportunity",
+        "Attention",
+        "Routine",
+        "Spam",
         "Needs review"
       ]
     },

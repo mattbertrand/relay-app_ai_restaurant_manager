@@ -7,7 +7,8 @@ import {
   parseFromAddress,
   extractTextBody,
 } from "../../shared/gmailApi.ts";
-import { analyzeEmail, opportunityTypeFor } from "../../shared/emailAnalysis.ts";
+import { analyzeEmail, opportunityTypeFor, conversationOutcomeFor } from "../../shared/emailAnalysis.ts";
+import { reprocessConversations } from "../../shared/reprocessConversations.ts";
 
 const MAX_MESSAGES = 20;
 const MAX_ANALYZE = 6;
@@ -48,6 +49,20 @@ export default async function(req) {
       if (c.email) customersByEmail[c.email.toLowerCase()] = c;
     });
 
+    // Re-run the current analysis on live Gmail conversations classified by an
+    // earlier version of the classifier (skips importing new mail)
+    const payload = await req.json().catch(() => ({}));
+    if (payload.reprocess) {
+      const reprocessSummary = await reprocessConversations({
+        base44,
+        restaurantId,
+        restaurantName: restaurant.name || 'the restaurant',
+        convos,
+        messages: existingMsgs,
+      });
+      return Response.json(reprocessSummary);
+    }
+
     const { messages: gmailMessages } = await listInboxMessages(accessToken);
     const summary = {
       connected: true,
@@ -56,6 +71,7 @@ export default async function(req) {
       newThreads: 0,
       analyzed: 0,
       opportunitiesCreated: 0,
+      attentionFlagged: 0,
       needsReview: 0,
     };
 
@@ -209,70 +225,12 @@ export default async function(req) {
         continue;
       }
 
-      if (analysis.is_opportunity) {
+      const classification = analysis.classification || 'routine';
+      if (classification === 'opportunity') {
         const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || 'Business inquiry';
         const originalMessage = `Subject: ${item.subject}\n\n${item.body}`;
         const opp = await base44.entities.Opportunity.create({
-          restaurant_id: restaurantId,
-          type: oppType,
-          title: analysis.title || item.subject,
-          description: analysis.description || analysis.why_flagged,
-          customer_name: item.senderName,
-          customer_email: item.senderEmail,
-          estimated_value_min: analysis.has_value_estimate ? analysis.estimated_value_min : null,
-          estimated_value_max: analysis.has_value_estimate ? analysis.estimated_value_max : null,
-          value_confidence: analysis.has_value_estimate ? analysis.value_confidence || 'Medium' : null,
-          value_basis: analysis.has_value_estimate ? analysis.value_basis : null,
-          priority: analysis.priority || 'medium',
-          status: 'Needs Attention',
-          draft_status: 'Draft',
-          recommended_action: analysis.recommended_action || 'Review and respond to this inquiry',
-          source: 'Gmail',
-          original_message: originalMessage.slice(0, 8000),
-          why_identified: [analysis.customer_facts, analysis.relay_assessment].filter(Boolean).join(' '),
-          draft_response: analysis.draft_response || '',
-          is_demo: false,
-        });
-
-        await base44.entities.Conversation.update(item.convo.id, {
-          opportunity_id: opp.id,
-          status: 'Opportunity',
-          analysis_status: 'Opportunity',
-        });
-
-        if (analysis.draft_response) {
-          await base44.entities.Action.create({
-            restaurant_id: restaurantId,
-            opportunity_id: opp.id,
-            type: 'Draft response',
-            description: `Draft a response to ${item.senderName} regarding "${item.subject}".`,
-            status: 'Pending Approval',
-            requires_approval: true,
-          });
-        }
-
-        await base44.entities.Activity.create({
-          restaurant_id: restaurantId,
-          opportunity_id: opp.id,
-          type: 'opportunity_identified',
-          description: `Opportunity identified: ${opp.title} from ${item.senderName} (Gmail)`,
-        });
-        if (analysis.draft_response) {
-          await base44.entities.Activity.create({
-            restaurant_id: restaurantId,
-            opportunity_id: opp.id,
-            type: 'draft_prepared',
-            description: `Draft response created for ${item.senderName}'s ${oppType.toLowerCase()}`,
-          });
-        }
-        summary.opportunitiesCreated++;
-      } else {
-        const isIrrelevant = analysis.category === 'irrelevant';
-        await base44.entities.Conversation.update(item.convo.id, {
-          analysis_status: 'No opportunity',
-          status: isIrrelevant ? 'Closed' : 'New',
-        });
-      }
+...
     }
 
     return Response.json(summary);
