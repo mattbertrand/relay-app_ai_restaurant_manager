@@ -9,7 +9,7 @@ import { approveResponse, dismissOpportunity } from "@/lib/opportunityActions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  ArrowLeft, Mail, Phone, User, Send, X, Edit3, Save,
+  ArrowLeft, Mail, Phone, User, X, Edit3, Save,
   MessageSquare, Lightbulb, Clock, Sparkles, CheckCircle2, Check, Info,
 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
@@ -347,7 +347,7 @@ export default function OpportunityDetail() {
             {!isApproved && (
               <>
                 <Button onClick={handleApprove} disabled={actionLoading} className="flex-1">
-                  <Send className="w-4 h-4 mr-2" /> Approve & Send
+                  <CheckCircle2 className="w-4 h-4 mr-2" /> Approve Response
                 </Button>
                 <Button variant="outline" onClick={startEditing} disabled={actionLoading} className="flex-1">
                   <Edit3 className="w-4 h-4 mr-2" /> Edit

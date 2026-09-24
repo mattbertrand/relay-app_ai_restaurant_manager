@@ -19,7 +19,10 @@ export default function PotentialValueCard({ opportunity }) {
         {hasValue ? formatValueRange(estimated_value_min, estimated_value_max) : "—"}
       </div>
       {value_basis && (
-        <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{value_basis}</p>
+        <div className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+          <p className="font-medium mb-0.5">How this was estimated:</p>
+          <p>{value_basis}</p>
+        </div>
       )}
       <p className="text-xs text-muted-foreground mt-3 pt-2.5 border-t border-border/60 leading-relaxed">
         This is an estimate based on the information available — not a confirmed amount.
