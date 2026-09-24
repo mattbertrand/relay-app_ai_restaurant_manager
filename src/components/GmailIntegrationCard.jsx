@@ -228,8 +228,13 @@ export default function GmailIntegrationCard() {
                   )}
                   <span className="truncate">
                     {r.scenario}
-                    {r.actualCategory && (
-                      <span className="text-muted-foreground"> — {r.actualCategory.replace(/_/g, " ")}</span>
+                    {(r.actualClassification || r.actualCategory) && (
+                      <span className="text-muted-foreground">
+                        {" — "}
+                        {[r.actualClassification, r.actualCategory && r.actualCategory.replace(/_/g, " ")]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     )}
                   </span>
                 </span>

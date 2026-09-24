@@ -230,7 +230,65 @@ export default async function(req) {
         const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || 'Business inquiry';
         const originalMessage = `Subject: ${item.subject}\n\n${item.body}`;
         const opp = await base44.entities.Opportunity.create({
-...
+          restaurant_id: restaurantId,
+          type: oppType,
+          title: analysis.title || item.subject,
+          description: analysis.description || analysis.why_flagged,
+          customer_name: item.senderName,
+          customer_email: item.senderEmail,
+          estimated_value_min: analysis.has_value_estimate ? analysis.estimated_value_min : null,
+          estimated_value_max: analysis.has_value_estimate ? analysis.estimated_value_max : null,
+          value_confidence: analysis.has_value_estimate ? analysis.value_confidence || 'Medium' : null,
+          value_basis: analysis.has_value_estimate ? analysis.value_basis : null,
+          priority: analysis.priority || 'medium',
+          status: 'Needs Attention',
+          draft_status: 'Draft',
+          recommended_action: analysis.recommended_action || 'Review and respond to this inquiry',
+          source: 'Gmail',
+          original_message: originalMessage.slice(0, 8000),
+          why_identified:
+            [analysis.customer_facts, analysis.relay_assessment].filter(Boolean).join(' ') +
+            ` Relay flagged this with ${analysis.confidence || 'Medium'} confidence.`,
+          draft_response: analysis.draft_response || '',
+          is_demo: false,
+        });
+
+        await base44.entities.Conversation.update(item.convo.id, {
+          opportunity_id: opp.id,
+          status: 'Opportunity',
+          analysis_status: 'Opportunity',
+        });
+
+        if (analysis.draft_response) {
+          await base44.entities.Action.create({
+            restaurant_id: restaurantId,
+            opportunity_id: opp.id,
+            type: 'Draft response',
+            description: `Draft a response to ${item.senderName} regarding "${item.subject}".`,
+            status: 'Pending Approval',
+            requires_approval: true,
+          });
+        }
+
+        await base44.entities.Activity.create({
+          restaurant_id: restaurantId,
+          opportunity_id: opp.id,
+          type: 'opportunity_identified',
+          description: `Opportunity identified: ${opp.title} from ${item.senderName} (Gmail)`,
+        });
+        if (analysis.draft_response) {
+          await base44.entities.Activity.create({
+            restaurant_id: restaurantId,
+            opportunity_id: opp.id,
+            type: 'draft_prepared',
+            description: `Draft response created for ${item.senderName}'s ${oppType.toLowerCase()}`,
+          });
+        }
+        summary.opportunitiesCreated++;
+      } else {
+        await base44.entities.Conversation.update(item.convo.id, conversationOutcomeFor(classification));
+        if (classification === 'attention') summary.attentionFlagged++;
+      }
     }
 
     return Response.json(summary);
