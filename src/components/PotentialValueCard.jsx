@@ -15,8 +15,8 @@ export default function PotentialValueCard({ opportunity }) {
         </div>
         <ValueConfidenceBadge confidence={value_confidence} />
       </div>
-      <div className="font-heading text-lg font-semibold text-foreground">
-        {hasValue ? formatValueRange(estimated_value_min, estimated_value_max) : "—"}
+      <div className={hasValue ? "font-heading text-lg font-semibold text-foreground" : "text-sm text-muted-foreground"}>
+        {hasValue ? formatValueRange(estimated_value_min, estimated_value_max) : "Not enough information"}
       </div>
       {value_basis && (
         <div className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
@@ -24,9 +24,11 @@ export default function PotentialValueCard({ opportunity }) {
           <p>{value_basis}</p>
         </div>
       )}
-      <p className="text-xs text-muted-foreground mt-3 pt-2.5 border-t border-border/60 leading-relaxed">
-        This is an estimate based on the information available — not a confirmed amount.
-      </p>
+      {hasValue && (
+        <p className="text-xs text-muted-foreground mt-3 pt-2.5 border-t border-border/60 leading-relaxed">
+          This is an estimate based on the information available — not a confirmed amount.
+        </p>
+      )}
     </div>
   );
 }

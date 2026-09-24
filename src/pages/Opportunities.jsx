@@ -18,7 +18,7 @@ const FILTERS = [
   { label: "Dismissed", value: "dismissed" },
 ];
 
-const NEEDS_ATTENTION_STATUSES = ["Needs Review", "Needs Response"];
+const NEEDS_ATTENTION_STATUSES = ["Needs Review", "Needs Response", "Needs Attention"];
 
 function matchesFilter(opp, filter) {
   if (filter === "all") return true;

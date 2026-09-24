@@ -12,6 +12,8 @@ const STATUS_STYLES = {
   "Closed": "bg-stone-100 text-stone-500 border-stone-200",
   "Pending Approval": "bg-amber-50 text-amber-700 border-amber-200",
   "Approved": "bg-blue-50 text-blue-700 border-blue-200",
+  "Opportunity": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "Reviewed": "bg-stone-100 text-stone-500 border-stone-200",
 };
 
 export default function StatusBadge({ status, className }) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
+import GmailIntegrationCard from "@/components/GmailIntegrationCard";
 import { getRestaurantId } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,6 @@ const TABS = [
 ];
 
 const INTEGRATIONS = [
-  { name: "Gmail", icon: Mail, desc: "Sync customer emails automatically" },
   { name: "Outlook", icon: Mail, desc: "Connect your Outlook inbox" },
   { name: "Website forms", icon: Globe, desc: "Capture inquiries from your website" },
   { name: "SMS", icon: MessageSquare, desc: "Receive and respond to text messages" },
@@ -226,6 +226,9 @@ export default function Settings() {
 
           <h3 className="font-heading text-base font-semibold text-foreground mb-3">Integrations</h3>
           <p className="text-sm text-muted-foreground mb-4">Connect your channels to start collecting real customer inquiries.</p>
+          <div className="mb-4">
+            <GmailIntegrationCard />
+          </div>
           <div className="grid sm:grid-cols-2 gap-3">
             {INTEGRATIONS.map((int) => (
               <div key={int.name} className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">

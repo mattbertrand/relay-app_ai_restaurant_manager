@@ -26,6 +26,25 @@
     "opportunity_id": {
       "type": "string"
     },
+    "gmail_thread_id": {
+      "type": "string"
+    },
+    "gmail_message_id": {
+      "type": "string"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "analysis_status": {
+      "type": "string",
+      "enum": [
+        "Not analyzed",
+        "No opportunity",
+        "Opportunity",
+        "Needs review"
+      ]
+    },
     "is_demo": {
       "type": "boolean",
       "default": false

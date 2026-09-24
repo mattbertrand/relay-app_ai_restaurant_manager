@@ -168,16 +168,14 @@ export default function OpportunityDetail() {
           <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
             <CheckCircle2 className="w-4 h-4" /> Response approved
           </div>
-          {opp.is_demo && (
-            <>
-              <p className="text-sm text-emerald-700 mt-1">
-                Demo action completed — no external message was actually sent.
-              </p>
-              <p className="text-xs text-emerald-600 mt-1.5">
-                Connect a communication integration in a future version to send approved responses.
-              </p>
-            </>
-          )}
+          <p className="text-sm text-emerald-700 mt-1">
+            {opp.is_demo
+              ? "Demo action completed — no external message was actually sent."
+              : "The approved response is recorded in Relay. No external message was sent."}
+          </p>
+          <p className="text-xs text-emerald-600 mt-1.5">
+            Connect a communication integration in a future version to send approved responses.
+          </p>
         </div>
       )}
 

@@ -29,7 +29,7 @@ export async function approveResponse(opp) {
     restaurant_id: opp.restaurant_id,
     opportunity_id: opp.id,
     type: "response_approved",
-    description: `Response approved for ${opp.customer_name}'s ${(opp.type || "").toLowerCase()} — demo action completed, no external message was sent`,
+    description: `Response approved for ${opp.customer_name}'s ${(opp.type || "").toLowerCase()} — recorded in Relay, no external message was sent`,
   });
 }
 

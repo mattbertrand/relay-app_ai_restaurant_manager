@@ -9,7 +9,7 @@ import PriorityBadge from "@/components/PriorityBadge";
 import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Bell, DollarSign, CheckCircle2, Target, ArrowRight, Activity as ActivityIcon, Clock } from "lucide-react";
+import { TrendingUp, Bell, DollarSign, CheckCircle2, Target, ArrowRight, Activity as ActivityIcon, Clock, Mail } from "lucide-react";
 
 const ACTIVITY_ICONS = {
   opportunity_identified: Target,
@@ -18,6 +18,8 @@ const ACTIVITY_ICONS = {
   follow_up_scheduled: Bell,
   opportunity_reviewed: CheckCircle2,
   opportunity_dismissed: Bell,
+  email_received: Mail,
+  draft_edited: Clock,
 };
 
 export default function Today() {
@@ -55,7 +57,7 @@ export default function Today() {
   }
 
   const needsAttention = (opportunities || []).filter(
-    (o) => o.status === "Needs Review" || o.status === "Needs Response"
+    (o) => o.status === "Needs Review" || o.status === "Needs Response" || o.status === "Needs Attention"
   );
   const followUpsNeeded = needsAttention.length;
   const completedActions = (actions || []).filter((a) => a.status === "Completed").length;
