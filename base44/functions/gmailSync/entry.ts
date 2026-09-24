@@ -10,6 +10,7 @@ import {
 import { analyzeEmail, opportunityTypeFor, conversationOutcomeFor } from "../../shared/emailAnalysis.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
 
+// Gmail sync for Relay — imports new mail, classifies it, and supports reprocessing.
 const MAX_MESSAGES = 20;
 const MAX_ANALYZE = 6;
 
