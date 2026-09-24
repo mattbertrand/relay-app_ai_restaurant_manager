@@ -5,6 +5,13 @@ import { Mail, Loader2, RefreshCw, XCircle, FlaskConical, Check } from "lucide-r
 
 const GMAIL_CONNECTOR_ID = "6ab4c39dd81d1c8bc44d5db3";
 
+function errorDetail(err) {
+  const body = err?.response?.data ?? err?.data;
+  const detail =
+    typeof body === "string" ? body : body?.error || body?.message || body?.detail;
+  return detail || err?.message || "Unknown error";
+}
+
 function summaryText(summary) {
   if (!summary) return "";
   const parts = [];
@@ -51,7 +58,7 @@ export default function GmailIntegrationCard() {
       const res = await base44.functions.invoke("gmailSync", {});
       setSyncSummary(res.data);
     } catch (err) {
-      setSyncSummary({ error: "Gmail sync failed. Please try again." });
+      setSyncSummary({ error: `Gmail sync failed: ${errorDetail(err)}` });
     } finally {
       setSyncing(false);
     }
