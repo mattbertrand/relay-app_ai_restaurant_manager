@@ -53,7 +53,7 @@ export default async function(req) {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const restaurantId = user.data && user.data.restaurant_id;
+    const restaurantId = user.restaurant_id || (user.data && user.data.restaurant_id);
     let restaurantName = 'Oak & Vine';
     if (restaurantId) {
       try {
