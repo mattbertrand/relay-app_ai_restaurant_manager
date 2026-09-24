@@ -60,7 +60,7 @@ export default async function(req) {
     };
 
     const toAnalyze = [];
-    const ownEmails = [restaurant.email, user.email]
+    const ownEmails = [restaurant.email]
       .map((e) => (e || '').toLowerCase())
       .filter(Boolean);
 
