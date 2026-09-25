@@ -1,0 +1,78 @@
+// Shared duplicate detection used by the Gmail sync and the reprocessing pass.
+// Keeps Relay's "never show the customer twice for the same thing" rules in one place.
+
+export function normalizeText(text) {
+  return (text || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function normalizeBody(text) {
+  return normalizeText(text).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function tokenSet(text) {
+  return new Set(normalizeBody(text).split(" ").filter((t) => t.length > 2));
+}
+
+// Jaccard similarity on body tokens, 0-1
+export function bodySimilarity(a, b) {
+  const A = tokenSet(a);
+  const B = tokenSet(b);
+  if (!A.size || !B.size) return 0;
+  let shared = 0;
+  for (const t of A) if (B.has(t)) shared++;
+  return shared / (A.size + B.size - shared);
+}
+
+const DUPLICATE_WINDOW_DAYS = 45;
+const receivedMs = (c) =>
+  new Date(c.received_at || c.created_date || 0).getTime();
+
+// Returns the existing conversation this email duplicates, or null.
+// A duplicate = same live Gmail sender with identical body text, or the same
+// subject plus a near-identical body, received within the window. Distinct
+// content from the same sender (e.g. a different question) is NOT a duplicate.
+export function findDuplicateConversation(convos, { senderEmail, subject, body }) {
+  const email = (senderEmail || "").toLowerCase();
+  if (!email) return null;
+  const cutoff = Date.now() - DUPLICATE_WINDOW_DAYS * 24 * 3600 * 1000;
+  let best = null;
+  for (const c of convos) {
+    if (c.is_demo || c.source !== "Gmail") continue;
+    if ((c.customer_email || "").toLowerCase() !== email) continue;
+    if (receivedMs(c) < cutoff) continue;
+    const sameBody = normalizeBody(c.message) === normalizeBody(body);
+    const sameSubject = normalizeText(c.subject) === normalizeText(subject);
+    if (sameBody || (sameSubject && bodySimilarity(c.message, body) >= 0.85)) {
+      if (!best || receivedMs(c) < receivedMs(best)) best = c;
+    }
+  }
+  return best;
+}
+
+const OPEN_OPP_STATUSES = ["Needs Attention", "Needs Review", "Needs Response", "In Progress"];
+
+// Open, non-demo opportunities already tracked for this sender (minus excludeId)
+export function openOpportunityTitlesFor(opps, senderEmail, excludeId = "") {
+  const email = (senderEmail || "").toLowerCase();
+  if (!email) return [];
+  return opps
+    .filter((o) => !o.is_demo && o.id !== excludeId)
+    .filter((o) => (o.customer_email || "").toLowerCase() === email)
+    .filter((o) => OPEN_OPP_STATUSES.includes(o.status))
+    .map((o) => o.title);
+}
+
+export function findOpenOpportunityByTitle(opps, senderEmail, title, excludeId = "") {
+  const wanted = (title || "").trim();
+  if (!wanted) return null;
+  return (
+    opps.find(
+      (o) =>
+        o.id !== excludeId &&
+        !o.is_demo &&
+        (o.customer_email || "").toLowerCase() === (senderEmail || "").toLowerCase() &&
+        o.title === wanted &&
+        OPEN_OPP_STATUSES.includes(o.status)
+    ) || null
+  );
+}

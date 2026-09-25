@@ -28,6 +28,8 @@ const ANALYSIS_SCHEMA = {
     why_flagged: { type: "string" },
     recommended_action: { type: "string" },
     draft_response: { type: "string" },
+    is_followup: { type: "boolean" },
+    followup_of: { type: "string" },
     has_value_estimate: { type: "boolean" },
     value_confidence: { type: "string", enum: ["High", "Medium", "Low"] },
     value_basis: { type: "string" },
@@ -64,7 +66,16 @@ export function conversationOutcomeFor(classification) {
   return { analysis_status: "Routine", status: "New" };
 }
 
-export async function analyzeEmail(base44, restaurantName, email) {
+export async function analyzeEmail(base44, restaurantName, email, options = {}) {
+  const existingTitles = (options.existingOpportunityTitles || []).filter(Boolean);
+  const followupBlock = existingTitles.length
+    ? `
+
+THE CUSTOMER'S EXISTING OPEN OPPORTUNITIES (already tracked by the restaurant — never create a second opportunity for the same matter)
+${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+If this email is clearly about the same matter as one of the titles above — a follow-up, re-send, duplicate, or continuation of the same request — set is_followup to true and followup_of to the exact matching title. A genuinely different request from the same customer is NOT a follow-up. When in doubt, is_followup is false and followup_of is an empty string.`
+    : "";
   const prompt = `You are reviewing one incoming email for "${restaurantName}", a restaurant. Relay's promise to the restaurant is: "Never let another customer opportunity fall through the cracks." Your job is to understand the sender's actual intent and decide how much of the manager's attention it deserves. Do not just match keywords — read the message the way a thoughtful manager would.
 
 EMAIL
@@ -72,6 +83,7 @@ From: ${email.senderName} <${email.senderEmail}>
 Subject: ${email.subject}
 Body:
 ${email.body}
+${followupBlock}
 
 CLASSIFICATION (choose exactly one)
 - opportunity: the message represents a meaningful potential revenue opportunity, a customer-retention issue, or a situation requiring manager intervention. This includes:

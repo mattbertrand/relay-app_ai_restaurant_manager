@@ -4,6 +4,10 @@ import {
   CLASSIFICATION_LABELS,
   conversationOutcomeFor,
 } from "./emailAnalysis.ts";
+import {
+  findOpenOpportunityByTitle,
+  openOpportunityTitlesFor,
+} from "./dedupe.ts";
 
 const MAX_REPROCESS = 20;
 const REPROCESSABLE = ["Opportunity", "No opportunity", "Attention", "Routine", "Spam", "Needs review"];
@@ -21,9 +25,11 @@ async function findOpportunity(base44, id) {
 // auto-created, untouched drafts are updated or removed; anything the manager
 // has already reviewed, edited, or approved is left alone.
 export async function reprocessConversations({ base44, restaurantId, restaurantName, convos, messages }) {
+  const opps = await base44.entities.Opportunity.filter({ restaurant_id: restaurantId }, null, 500);
   const summary = {
     connected: true,
     reprocessed: 0,
+    followupsLinked: 0,
     opportunitiesCreated: 0,
     opportunitiesUpdated: 0,
     opportunitiesRemoved: 0,
@@ -46,6 +52,8 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         senderEmail: convo.customer_email,
         subject: convo.subject,
         body,
+      }, {
+        existingOpportunityTitles: openOpportunityTitlesFor(opps, convo.customer_email, convo.opportunity_id),
       });
     } catch (e) {
       // Analysis failed — keep the email visible and flagged for manual review
@@ -64,6 +72,32 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     const classification = analysis.classification || "routine";
 
     if (classification === "opportunity") {
+      // A follow-up about a matter already tracked: link it, don't duplicate it
+      const relatedOpp =
+        analysis.is_followup && (!linkedOpp || untouchedDraft)
+          ? findOpenOpportunityByTitle(opps, convo.customer_email, analysis.followup_of, convo.opportunity_id)
+          : null;
+      if (relatedOpp) {
+        if (linkedOpp && untouchedDraft) {
+          await base44.entities.Action.deleteMany({ opportunity_id: linkedOpp.id });
+          await base44.entities.Activity.deleteMany({ opportunity_id: linkedOpp.id });
+          await base44.entities.Opportunity.delete(linkedOpp.id);
+          summary.opportunitiesRemoved++;
+        }
+        await base44.entities.Conversation.update(convo.id, {
+          opportunity_id: relatedOpp.id,
+          status: "Opportunity",
+          analysis_status: "Opportunity",
+        });
+        await base44.entities.Activity.create({
+          restaurant_id: restaurantId,
+          opportunity_id: relatedOpp.id,
+          type: "message_reviewed",
+          description: `Follow-up from ${convo.customer_name} linked to existing opportunity: ${relatedOpp.title}`,
+        });
+        summary.followupsLinked++;
+        continue;
+      }
       const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || "Business inquiry";
       const originalMessage = `Subject: ${convo.subject}\n\n${body}`;
       const fields = {
@@ -98,6 +132,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
           is_demo: false,
           ...fields,
         });
+        opps.push(opp);
         oppId = opp.id;
         if (analysis.draft_response) {
           await base44.entities.Action.create({

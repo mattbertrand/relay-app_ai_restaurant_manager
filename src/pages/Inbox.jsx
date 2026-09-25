@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import StatusBadge from "@/components/StatusBadge";
 import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
+import ConversationCard from "@/components/ConversationCard";
 import { Button } from "@/components/ui/button";
-import { timeAgo } from "@/lib/format";
-import { Inbox as InboxIcon, Mail, RefreshCw, Loader2 } from "lucide-react";
+import { conversationGroupKey, pickPrimaryConversation } from "@/lib/dedupe";
+import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const FILTERS = ["All", "New", "Needs Attention", "Opportunity", "Reviewed", "Closed"];
@@ -23,6 +22,7 @@ export default function Inbox() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState({});
   const syncedRef = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -78,6 +78,27 @@ export default function Inbox() {
   });
   const hasDemo = (conversations || []).some((c) => c.is_demo);
   const isLive = (c) => c.source === "Gmail" && !c.is_demo;
+
+  // Group near-duplicate live messages (same sender, same subject) so they read
+  // as one conversation instead of a wall of repeated cards
+  const liveGroups = {};
+  for (const c of filtered) {
+    if (!isLive(c)) continue;
+    const key = conversationGroupKey(c);
+    if (!key) continue;
+    (liveGroups[key] ||= []).push(c);
+  }
+  const similarByPrimaryId = new Map();
+  const hiddenSimilarIds = new Set();
+  for (const members of Object.values(liveGroups)) {
+    if (members.length < 2) continue;
+    const primary = pickPrimaryConversation(members);
+    const similar = members.filter((m) => m.id !== primary.id);
+    similarByPrimaryId.set(primary.id, similar);
+    similar.forEach((m) => hiddenSimilarIds.add(m.id));
+  }
+  const toggleGroup = (id) =>
+    setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
     <div className="p-5 md:p-8 max-w-5xl mx-auto pb-20 md:pb-8">
@@ -172,50 +193,37 @@ export default function Inbox() {
         />
       ) : (
         <div className="space-y-3">
-          {filtered.map((convo) => (
-            <div key={convo.id} className="bg-card rounded-xl border border-border p-4 md:p-5">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Mail className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="min-w-0">
-                      <span className="text-sm font-medium text-foreground truncate block">{convo.customer_name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {convo.source} · {timeAgo(convo.received_at || convo.created_date)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {isLive(convo) ? (
-                        <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                          Live Gmail
-                        </span>
-                      ) : convo.is_demo ? (
-                        <span className="text-[10px] font-medium text-stone-500 bg-stone-50 border border-stone-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                          Demo data
-                        </span>
-                      ) : null}
-                      <StatusBadge status={convo.status} />
-                    </div>
-                  </div>
-                  {isLive(convo) && convo.customer_email && (
-                    <p className="text-xs text-muted-foreground">{convo.customer_email}</p>
-                  )}
-                  <h3 className="text-sm font-medium text-foreground mt-2">{convo.subject}</h3>
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
-                  {convo.opportunity_id && (
-                    <Link
-                      to={`/opportunities/${convo.opportunity_id}`}
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2.5"
+          {filtered.map((convo) => {
+            if (hiddenSimilarIds.has(convo.id)) return null;
+            const similar = similarByPrimaryId.get(convo.id) || [];
+            return (
+              <div key={convo.id}>
+                <ConversationCard convo={convo} isLive={isLive(convo)} />
+                {similar.length > 0 && (
+                  <div className="pl-2 md:pl-4">
+                    <button
+                      onClick={() => toggleGroup(convo.id)}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-3"
                     >
-                      View related opportunity →
-                    </Link>
-                  )}
-                </div>
+                      {expandedGroups[convo.id] ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                      {similar.length} similar message{similar.length === 1 ? "" : "s"} from this sender
+                    </button>
+                    {expandedGroups[convo.id] && (
+                      <div className="mt-3 space-y-3 border-l-2 border-border pl-3 md:pl-4">
+                        {similar.map((c) => (
+                          <ConversationCard key={c.id} convo={c} isLive={isLive(c)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

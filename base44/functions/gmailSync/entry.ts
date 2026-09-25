@@ -8,6 +8,11 @@ import {
   extractTextBody,
 } from "../../shared/gmailApi.ts";
 import { analyzeEmail, opportunityTypeFor, conversationOutcomeFor } from "../../shared/emailAnalysis.ts";
+import {
+  findDuplicateConversation,
+  findOpenOpportunityByTitle,
+  openOpportunityTitlesFor,
+} from "../../shared/dedupe.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
 
 // Gmail sync for Relay — imports new mail, classifies it, and supports reprocessing.
@@ -35,10 +40,11 @@ export default async function(req) {
     const restaurant = await base44.entities.Restaurant.get(restaurantId);
 
     // Load existing records for duplicate and thread protection
-    const [existingMsgs, convos, customers] = await Promise.all([
+    const [existingMsgs, convos, customers, opps] = await Promise.all([
       base44.entities.ConversationMessage.filter({ restaurant_id: restaurantId }, null, 500),
       base44.entities.Conversation.filter({ restaurant_id: restaurantId }, null, 500),
       base44.entities.Customer.filter({ restaurant_id: restaurantId }, null, 500),
+      base44.entities.Opportunity.filter({ restaurant_id: restaurantId }, null, 500),
     ]);
     const seenMessageIds = new Set(existingMsgs.map((m) => m.gmail_message_id).filter(Boolean));
     const threadConvos = {};
@@ -70,8 +76,10 @@ export default async function(req) {
       emailsChecked: gmailMessages.length,
       newMessages: 0,
       newThreads: 0,
+      duplicatesMerged: 0,
       analyzed: 0,
       opportunitiesCreated: 0,
+      followupsLinked: 0,
       attentionFlagged: 0,
       needsReview: 0,
     };
@@ -125,34 +133,29 @@ export default async function(req) {
         });
       }
 
-      const threadConvo = threadConvos[message.threadId];
+      let threadConvo = threadConvos[message.threadId] || null;
+      let duplicateConvo = null;
+      if (!threadConvo && fromEmail) {
+        // Fresh database check so two overlapping syncs can't import the same
+        // email twice, and so identical re-sends merge into the original
+        const senderConvos = await base44.entities.Conversation.filter(
+          { restaurant_id: restaurantId, customer_email: from.email },
+          null,
+          100
+        );
+        threadConvo = senderConvos.find((c) => c.gmail_thread_id === message.threadId) || null;
+        if (threadConvo) {
+          threadConvos[message.threadId] = threadConvo;
+        } else {
+          duplicateConvo = findDuplicateConversation(senderConvos, {
+            senderEmail: fromEmail,
+            subject,
+            body,
+          });
+        }
+      }
 
-      // Store the individual message (thread-linked, duplicate-protected by message id)
-      await base44.entities.ConversationMessage.create({
-        restaurant_id: restaurantId,
-        conversation_id: threadConvo ? threadConvo.id : '',
-        gmail_message_id: message.id,
-        sender_name: from.name,
-        sender_email: from.email,
-        body: body.slice(0, 10000),
-        received_at: receivedAt,
-      });
-
-      if (threadConvo) {
-        // Existing thread: attach the reply, don't duplicate the conversation
-        const nextStatus = threadConvo.opportunity_id
-          ? threadConvo.status
-          : threadConvo.status === 'Closed'
-            ? 'Closed'
-            : 'New';
-        await base44.entities.Conversation.update(threadConvo.id, { status: nextStatus });
-        await base44.entities.Activity.create({
-          restaurant_id: restaurantId,
-          opportunity_id: threadConvo.opportunity_id || '',
-          type: 'email_received',
-          description: `Email received: ${subject} from ${from.name}`,
-        });
-      } else {
+      if (!threadConvo && !duplicateConvo) {
         const convo = await base44.entities.Conversation.create({
           restaurant_id: restaurantId,
           customer_name: from.name,
@@ -169,6 +172,17 @@ export default async function(req) {
         });
         threadConvos[message.threadId] = convo;
         summary.newThreads++;
+
+        // Store the message linked to its conversation
+        await base44.entities.ConversationMessage.create({
+          restaurant_id: restaurantId,
+          conversation_id: convo.id,
+          gmail_message_id: message.id,
+          sender_name: from.name,
+          sender_email: from.email,
+          body: body.slice(0, 10000),
+          received_at: receivedAt,
+        });
         await base44.entities.Activity.create({
           restaurant_id: restaurantId,
           opportunity_id: '',
@@ -182,6 +196,42 @@ export default async function(req) {
           senderName: from.name,
           senderEmail: from.email,
           receivedAt,
+        });
+      } else {
+        const target = threadConvo || duplicateConvo;
+        // Attach the message to the existing conversation (reply or duplicate)
+        await base44.entities.ConversationMessage.create({
+          restaurant_id: restaurantId,
+          conversation_id: target.id,
+          gmail_message_id: message.id,
+          sender_name: from.name,
+          sender_email: from.email,
+          body: body.slice(0, 10000),
+          received_at: receivedAt,
+        });
+
+        if (threadConvo) {
+          // Existing thread: attach the reply, don't duplicate the conversation
+          const nextStatus = threadConvo.opportunity_id
+            ? threadConvo.status
+            : threadConvo.status === 'Closed'
+              ? 'Closed'
+              : 'New';
+          await base44.entities.Conversation.update(threadConvo.id, { status: nextStatus });
+        } else {
+          // Same email arriving again (re-send, Gmail duplication, transfer retry)
+          summary.duplicatesMerged++;
+          await base44.entities.Conversation.update(duplicateConvo.id, {
+            status: duplicateConvo.opportunity_id ? duplicateConvo.status : 'New',
+          });
+        }
+        await base44.entities.Activity.create({
+          restaurant_id: restaurantId,
+          opportunity_id: target.opportunity_id || '',
+          type: threadConvo ? 'email_received' : 'email_merged',
+          description: threadConvo
+            ? `Email received: ${subject} from ${from.name}`
+            : `Duplicate email from ${from.name} merged into an existing conversation ("${subject}")`,
         });
       }
     }
@@ -215,6 +265,8 @@ export default async function(req) {
           senderEmail: item.senderEmail,
           subject: item.subject,
           body: item.body,
+        }, {
+          existingOpportunityTitles: openOpportunityTitlesFor(opps, item.senderEmail),
         });
       } catch (e) {
         // Analysis failed — keep the email visible and flag it for manual review
@@ -228,6 +280,25 @@ export default async function(req) {
 
       const classification = analysis.classification || 'routine';
       if (classification === 'opportunity') {
+        // A follow-up about a matter already tracked: link it, don't duplicate it
+        const relatedOpp = analysis.is_followup
+          ? findOpenOpportunityByTitle(opps, item.senderEmail, analysis.followup_of)
+          : null;
+        if (relatedOpp) {
+          await base44.entities.Conversation.update(item.convo.id, {
+            opportunity_id: relatedOpp.id,
+            status: 'Opportunity',
+            analysis_status: 'Opportunity',
+          });
+          await base44.entities.Activity.create({
+            restaurant_id: restaurantId,
+            opportunity_id: relatedOpp.id,
+            type: 'message_reviewed',
+            description: `Follow-up from ${item.senderName} linked to existing opportunity: ${relatedOpp.title}`,
+          });
+          summary.followupsLinked++;
+          continue;
+        }
         const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || 'Business inquiry';
         const originalMessage = `Subject: ${item.subject}\n\n${item.body}`;
         const opp = await base44.entities.Opportunity.create({
@@ -253,6 +324,7 @@ export default async function(req) {
           draft_response: analysis.draft_response || '',
           is_demo: false,
         });
+        opps.push(opp);
 
         await base44.entities.Conversation.update(item.convo.id, {
           opportunity_id: opp.id,

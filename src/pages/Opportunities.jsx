@@ -112,6 +112,9 @@ export default function Opportunities() {
                     <PriorityBadge priority={opp.priority} />
                     <ValueConfidenceBadge confidence={opp.value_confidence} />
                     <span className="text-xs text-muted-foreground">{opp.source}</span>
+                    {opp.is_demo && (
+                      <span className="text-[10px] font-medium text-stone-500 bg-stone-50 border border-stone-200 px-1.5 py-0.5 rounded-full">Demo data</span>
+                    )}
                   </div>
                   <h3 className="font-medium text-foreground text-sm md:text-base">{opp.title}</h3>
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{opp.description}</p>

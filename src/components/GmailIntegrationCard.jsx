@@ -23,6 +23,12 @@ function summaryText(summary) {
       `${summary.opportunitiesCreated} opportunit${summary.opportunitiesCreated === 1 ? "y" : "ies"} identified`
     );
   }
+  if (summary.duplicatesMerged) {
+    parts.push(`${summary.duplicatesMerged} duplicate${summary.duplicatesMerged === 1 ? "" : "s"} merged`);
+  }
+  if (summary.followupsLinked) {
+    parts.push(`${summary.followupsLinked} follow-up${summary.followupsLinked === 1 ? "" : "s"} linked to existing`);
+  }
   if (summary.needsReview) parts.push(`${summary.needsReview} need review`);
   return parts.join(" · ") + ".";
 }
@@ -43,6 +49,9 @@ function reprocessText(summary) {
     parts.push(
       `${summary.opportunitiesRemoved} outdated draft${summary.opportunitiesRemoved === 1 ? "" : "s"} removed`
     );
+  }
+  if (summary.followupsLinked) {
+    parts.push(`${summary.followupsLinked} follow-up${summary.followupsLinked === 1 ? "" : "s"} linked to existing`);
   }
   if (summary.needsReview) parts.push(`${summary.needsReview} need review`);
   return parts.length ? parts.join(" · ") + "." : "No conversations to re-analyze.";
