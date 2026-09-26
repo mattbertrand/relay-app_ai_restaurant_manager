@@ -10,8 +10,9 @@ import {
 import { analyzeEmail, opportunityTypeFor, conversationOutcomeFor } from "../../shared/emailAnalysis.ts";
 import {
   findDuplicateConversation,
-  findOpenOpportunityByTitle,
-  openOpportunityTitlesFor,
+  findOpportunityByTitle,
+  opportunityTitlesFor,
+  linkFollowup,
 } from "../../shared/dedupe.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
 
@@ -46,7 +47,15 @@ export default async function(req) {
       base44.entities.Customer.filter({ restaurant_id: restaurantId }, null, 500),
       base44.entities.Opportunity.filter({ restaurant_id: restaurantId }, null, 500),
     ]);
-    const seenMessageIds = new Set(existingMsgs.map((m) => m.gmail_message_id).filter(Boolean));
+    // The Gmail message ID is the single source of truth for "already
+    // imported": it is checked against both message and conversation records
+    // so a retry or overlapping sync can never import the same email twice.
+    const seenMessageIds = new Set(
+      [
+        ...existingMsgs.map((m) => m.gmail_message_id),
+        ...convos.map((c) => c.gmail_message_id),
+      ].filter(Boolean)
+    );
     const threadConvos = {};
     convos.forEach((c) => {
       if (c.gmail_thread_id) threadConvos[c.gmail_thread_id] = c;
@@ -80,6 +89,7 @@ export default async function(req) {
       analyzed: 0,
       opportunitiesCreated: 0,
       followupsLinked: 0,
+      reopened: 0,
       attentionFlagged: 0,
       needsReview: 0,
     };
@@ -156,6 +166,17 @@ export default async function(req) {
       }
 
       if (!threadConvo && !duplicateConvo) {
+        // Fresh check: a concurrent or retried sync may have imported this
+        // exact message since the snapshot was loaded
+        const alreadyImported = await base44.entities.ConversationMessage.filter(
+          { gmail_message_id: message.id },
+          null,
+          1
+        );
+        if (alreadyImported.length) {
+          seenMessageIds.add(message.id);
+          continue;
+        }
         const convo = await base44.entities.Conversation.create({
           restaurant_id: restaurantId,
           customer_name: from.name,
@@ -218,6 +239,23 @@ export default async function(req) {
               ? 'Closed'
               : 'New';
           await base44.entities.Conversation.update(threadConvo.id, { status: nextStatus });
+
+          // A new customer message on a thread whose opportunity was resolved
+          // reopens the matter — it is not finished after all
+          const threadOpp = threadConvo.opportunity_id
+            ? opps.find((o) => o.id === threadConvo.opportunity_id)
+            : null;
+          if (threadOpp && threadOpp.status === 'Resolved') {
+            await base44.entities.Opportunity.update(threadOpp.id, { status: 'In Progress' });
+            await base44.entities.Activity.create({
+              restaurant_id: restaurantId,
+              opportunity_id: threadOpp.id,
+              type: 'opportunity_reopened',
+              description: `New customer message received — Opportunity reopened: ${threadOpp.title}`,
+            });
+            await base44.entities.Conversation.update(threadConvo.id, { status: 'Opportunity' });
+            summary.reopened++;
+          }
         } else {
           // Same email arriving again (re-send, Gmail duplication, transfer retry)
           summary.duplicatesMerged++;
@@ -266,7 +304,7 @@ export default async function(req) {
           subject: item.subject,
           body: item.body,
         }, {
-          existingOpportunityTitles: openOpportunityTitlesFor(opps, item.senderEmail),
+          existingOpportunityTitles: opportunityTitlesFor(opps, item.senderEmail),
         });
       } catch (e) {
         // Analysis failed — keep the email visible and flag it for manual review
@@ -282,21 +320,24 @@ export default async function(req) {
       if (classification === 'opportunity') {
         // A follow-up about a matter already tracked: link it, don't duplicate it
         const relatedOpp = analysis.is_followup
-          ? findOpenOpportunityByTitle(opps, item.senderEmail, analysis.followup_of)
+          ? findOpportunityByTitle(opps, item.senderEmail, analysis.followup_of)
           : null;
         if (relatedOpp) {
+          // Link the follow-up to the existing opportunity — and reopen it if
+          // the customer came back after the matter was marked resolved
+          const reopened = await linkFollowup(base44, {
+            restaurantId,
+            opportunity: relatedOpp,
+            customerName: item.senderName,
+            priority: analysis.priority,
+          });
           await base44.entities.Conversation.update(item.convo.id, {
             opportunity_id: relatedOpp.id,
             status: 'Opportunity',
             analysis_status: 'Opportunity',
           });
-          await base44.entities.Activity.create({
-            restaurant_id: restaurantId,
-            opportunity_id: relatedOpp.id,
-            type: 'message_reviewed',
-            description: `Follow-up from ${item.senderName} linked to existing opportunity: ${relatedOpp.title}`,
-          });
           summary.followupsLinked++;
+          if (reopened) summary.reopened++;
           continue;
         }
         const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || 'Business inquiry';
@@ -313,7 +354,7 @@ export default async function(req) {
           value_confidence: analysis.has_value_estimate ? analysis.value_confidence || 'Medium' : null,
           value_basis: analysis.has_value_estimate ? analysis.value_basis : null,
           priority: analysis.priority || 'medium',
-          status: 'Needs Attention',
+          status: 'New',
           draft_status: 'Draft',
           recommended_action: analysis.recommended_action || 'Review and respond to this inquiry',
           source: 'Gmail',

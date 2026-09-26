@@ -29,6 +29,9 @@ function summaryText(summary) {
   if (summary.followupsLinked) {
     parts.push(`${summary.followupsLinked} follow-up${summary.followupsLinked === 1 ? "" : "s"} linked to existing`);
   }
+  if (summary.reopened) {
+    parts.push(`${summary.reopened} reopened`);
+  }
   if (summary.needsReview) parts.push(`${summary.needsReview} need review`);
   return parts.join(" · ") + ".";
 }
@@ -52,6 +55,9 @@ function reprocessText(summary) {
   }
   if (summary.followupsLinked) {
     parts.push(`${summary.followupsLinked} follow-up${summary.followupsLinked === 1 ? "" : "s"} linked to existing`);
+  }
+  if (summary.reopened) {
+    parts.push(`${summary.reopened} reopened`);
   }
   if (summary.needsReview) parts.push(`${summary.needsReview} need review`);
   return parts.length ? parts.join(" · ") + "." : "No conversations to re-analyze.";

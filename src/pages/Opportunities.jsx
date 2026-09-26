@@ -7,25 +7,25 @@ import ValueConfidenceBadge from "@/components/ValueConfidenceBadge";
 import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
 import { formatValueRange, timeAgo } from "@/lib/format";
+import { lifecycleStatus } from "@/lib/opportunityLifecycle";
 import { Target, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const FILTERS = [
   { label: "All", value: "all" },
-  { label: "Needs Attention", value: "needs_attention" },
+  { label: "New", value: "new" },
   { label: "In Progress", value: "in_progress" },
-  { label: "Completed", value: "completed" },
+  { label: "Resolved", value: "resolved" },
   { label: "Dismissed", value: "dismissed" },
 ];
 
-const NEEDS_ATTENTION_STATUSES = ["Needs Review", "Needs Response", "Needs Attention"];
-
 function matchesFilter(opp, filter) {
+  const stage = lifecycleStatus(opp.status);
   if (filter === "all") return true;
-  if (filter === "needs_attention") return NEEDS_ATTENTION_STATUSES.includes(opp.status);
-  if (filter === "in_progress") return opp.status === "In Progress";
-  if (filter === "completed") return opp.status === "Completed";
-  if (filter === "dismissed") return opp.status === "Dismissed";
+  if (filter === "new") return stage === "New";
+  if (filter === "in_progress") return stage === "In Progress";
+  if (filter === "resolved") return stage === "Resolved";
+  if (filter === "dismissed") return stage === "Dismissed";
   return true;
 }
 
@@ -128,7 +128,10 @@ export default function Opportunities() {
                   <div className="text-sm font-semibold text-foreground whitespace-nowrap">
                     {formatValueRange(opp.estimated_value_min, opp.estimated_value_max)}
                   </div>
-                  <StatusBadge status={opp.status} />
+                  <StatusBadge status={lifecycleStatus(opp.status)} />
+                  {lifecycleStatus(opp.status) === "New" && (
+                    <span className="text-[11px] text-amber-600 whitespace-nowrap">Needs review</span>
+                  )}
                 </div>
               </div>
             </Link>

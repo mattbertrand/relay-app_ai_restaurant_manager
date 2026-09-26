@@ -5,14 +5,22 @@ import StatusBadge from "@/components/StatusBadge";
 import PriorityBadge from "@/components/PriorityBadge";
 import PotentialValueCard from "@/components/PotentialValueCard";
 import DismissDialog from "@/components/DismissDialog";
-import { approveResponse, dismissOpportunity } from "@/lib/opportunityActions";
+import {
+  approveResponse,
+  dismissOpportunity,
+  resolveOpportunity,
+  reopenOpportunity,
+} from "@/lib/opportunityActions";
+import { NEW_STATUSES, lifecycleStatus, nextStepFor } from "@/lib/opportunityLifecycle";
+import LifecycleStepper from "@/components/LifecycleStepper";
+import ResolveDialog from "@/components/ResolveDialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, Mail, Phone, User, X, Edit3, Save,
-  MessageSquare, Lightbulb, Clock, Sparkles, CheckCircle2, Check, Info,
+  MessageSquare, Lightbulb, Clock, Sparkles, CheckCircle2, Check, Info, RotateCcw,
 } from "lucide-react";
-import { timeAgo } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const DRAFT_STATUS_STYLES = {
@@ -32,6 +40,7 @@ export default function OpportunityDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [draftUpdated, setDraftUpdated] = useState(false);
   const [dismissOpen, setDismissOpen] = useState(false);
+  const [resolveOpen, setResolveOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -44,6 +53,20 @@ export default function OpportunityDetail() {
       setOpp(o);
       setDraft(o.draft_response || "");
       setActivities(acts);
+
+      // Opening a New opportunity counts as the manager reviewing it — the
+      // lifecycle moves to In Progress, never to Resolved.
+      if (NEW_STATUSES.includes(o.status)) {
+        await base44.entities.Opportunity.update(id, { status: "In Progress" });
+        await base44.entities.Activity.create({
+          restaurant_id: o.restaurant_id,
+          opportunity_id: id,
+          type: "opportunity_reviewed",
+          description: `Opportunity reviewed: ${o.title}`,
+        });
+        setOpp({ ...o, status: "In Progress" });
+        setActivities(await base44.entities.Activity.filter({ opportunity_id: id }, "-created_date", 50));
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -118,6 +141,33 @@ export default function OpportunityDetail() {
     }
   };
 
+  const handleResolve = async (note) => {
+    setActionLoading(true);
+    try {
+      await resolveOpportunity(opp, note);
+      setResolveOpen(false);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    setActionLoading(true);
+    try {
+      await reopenOpportunity(opp);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -138,7 +188,10 @@ export default function OpportunityDetail() {
   }
 
   const draftStatus = opp.draft_status || "Draft";
-  const actionsVisible = opp.status !== "Dismissed" && opp.status !== "Completed";
+  const stage = lifecycleStatus(opp.status);
+  const isResolved = stage === "Resolved";
+  const isDismissed = stage === "Dismissed";
+  const actionsVisible = !isResolved && !isDismissed;
 
   return (
     <div className="p-5 md:p-8 max-w-3xl mx-auto pb-20 md:pb-8">
@@ -156,10 +209,21 @@ export default function OpportunityDetail() {
             {opp.type}
           </span>
           <PriorityBadge priority={opp.priority} />
-          <StatusBadge status={opp.status} />
+          <StatusBadge status={lifecycleStatus(opp.status)} />
         </div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">{opp.title}</h1>
         <p className="text-sm text-muted-foreground mt-2">{opp.description}</p>
+      </div>
+
+      {/* Lifecycle & next step */}
+      <div className="mb-6">
+        <div className="bg-card rounded-xl border border-border p-4 md:p-5">
+          <LifecycleStepper status={opp.status} />
+        </div>
+        <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-1">What's next</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">{nextStepFor(opp)}</p>
+        </div>
       </div>
 
       {/* Approved notice */}
@@ -330,7 +394,7 @@ export default function OpportunityDetail() {
                 <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm text-foreground">{act.description}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(act.created_date)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{formatDateTime(act.created_date)}</p>
                 </div>
               </div>
             ))}
@@ -339,7 +403,21 @@ export default function OpportunityDetail() {
       </div>
 
       {/* Actions */}
-      {actionsVisible && (
+      {isResolved ? (
+        <div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 md:p-5 mb-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+              <CheckCircle2 className="w-4 h-4" /> Resolved — no further action required.
+            </div>
+            {opp.notes && (
+              <p className="text-xs text-emerald-700 mt-1">Note: {opp.notes}</p>
+            )}
+          </div>
+          <Button variant="outline" onClick={handleReopen} disabled={actionLoading}>
+            <RotateCcw className="w-4 h-4 mr-2" /> Reopen
+          </Button>
+        </div>
+      ) : actionsVisible && (
         <div>
           <div className="flex flex-col sm:flex-row gap-3">
             {!isApproved && (
@@ -352,6 +430,14 @@ export default function OpportunityDetail() {
                 </Button>
               </>
             )}
+            <Button
+              variant="secondary"
+              onClick={() => setResolveOpen(true)}
+              disabled={actionLoading}
+              className="flex-1"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-2" /> Mark as Resolved
+            </Button>
             <Button
               variant="ghost"
               onClick={() => setDismissOpen(true)}
@@ -369,6 +455,14 @@ export default function OpportunityDetail() {
           )}
         </div>
       )}
+
+      <ResolveDialog
+        open={resolveOpen}
+        onOpenChange={setResolveOpen}
+        title={opp.title}
+        onConfirm={handleResolve}
+        loading={actionLoading}
+      />
 
       <DismissDialog
         open={dismissOpen}

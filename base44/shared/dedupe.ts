@@ -1,5 +1,6 @@
-// Shared duplicate detection used by the Gmail sync and the reprocessing pass.
-// Keeps Relay's "never show the customer twice for the same thing" rules in one place.
+// Shared duplicate detection and follow-up linking used by the Gmail sync and
+// the reprocessing pass. Keeps Relay's "never show the customer twice for the
+// same thing" rules in one place.
 
 export function normalizeText(text) {
   return (text || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -49,20 +50,30 @@ export function findDuplicateConversation(convos, { senderEmail, subject, body }
   return best;
 }
 
-const OPEN_OPP_STATUSES = ["Needs Attention", "Needs Review", "Needs Response", "In Progress"];
+// Statuses in which an opportunity can receive a linked follow-up. Resolved
+// matters are included on purpose: a new customer message about the same
+// matter reopens them (handled by linkFollowup).
+const LINKABLE_OPP_STATUSES = [
+  "New",
+  "In Progress",
+  "Resolved",
+  "Needs Attention",
+  "Needs Review",
+  "Needs Response",
+];
 
-// Open, non-demo opportunities already tracked for this sender (minus excludeId)
-export function openOpportunityTitlesFor(opps, senderEmail, excludeId = "") {
+// Non-demo opportunities already tracked for this sender (minus excludeId)
+export function opportunityTitlesFor(opps, senderEmail, excludeId = "") {
   const email = (senderEmail || "").toLowerCase();
   if (!email) return [];
   return opps
     .filter((o) => !o.is_demo && o.id !== excludeId)
     .filter((o) => (o.customer_email || "").toLowerCase() === email)
-    .filter((o) => OPEN_OPP_STATUSES.includes(o.status))
+    .filter((o) => LINKABLE_OPP_STATUSES.includes(o.status))
     .map((o) => o.title);
 }
 
-export function findOpenOpportunityByTitle(opps, senderEmail, title, excludeId = "") {
+export function findOpportunityByTitle(opps, senderEmail, title, excludeId = "") {
   const wanted = (title || "").trim();
   if (!wanted) return null;
   return (
@@ -72,7 +83,33 @@ export function findOpenOpportunityByTitle(opps, senderEmail, title, excludeId =
         !o.is_demo &&
         (o.customer_email || "").toLowerCase() === (senderEmail || "").toLowerCase() &&
         o.title === wanted &&
-        OPEN_OPP_STATUSES.includes(o.status)
+        LINKABLE_OPP_STATUSES.includes(o.status)
     ) || null
   );
+}
+
+// Links a follow-up message to an existing opportunity: bumps priority when the
+// new message is urgent, reopens a resolved matter, and records the activity.
+export async function linkFollowup(base44, { restaurantId, opportunity, customerName, priority }) {
+  const updates = {};
+  let reopened = false;
+  if (opportunity.status === "Resolved") {
+    updates.status = "In Progress";
+    reopened = true;
+  }
+  if (priority === "high" && opportunity.priority !== "high") {
+    updates.priority = "high";
+  }
+  if (Object.keys(updates).length) {
+    await base44.entities.Opportunity.update(opportunity.id, updates);
+  }
+  await base44.entities.Activity.create({
+    restaurant_id: restaurantId,
+    opportunity_id: opportunity.id,
+    type: reopened ? "opportunity_reopened" : "message_reviewed",
+    description: reopened
+      ? `New customer message received — Opportunity reopened: ${opportunity.title}`
+      : `Follow-up from ${customerName} linked to existing opportunity: ${opportunity.title}`,
+  });
+  return reopened;
 }

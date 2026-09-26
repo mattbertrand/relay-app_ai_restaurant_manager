@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { getRestaurantId, formatValueRange, timeAgo } from "@/lib/format";
+import { lifecycleStatus } from "@/lib/opportunityLifecycle";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 import PriorityBadge from "@/components/PriorityBadge";
@@ -20,6 +21,9 @@ const ACTIVITY_ICONS = {
   opportunity_dismissed: Bell,
   email_received: Mail,
   draft_edited: Clock,
+  opportunity_resolved: CheckCircle2,
+  opportunity_reopened: Bell,
+  status_update: Clock,
 };
 
 export default function Today() {
@@ -56,12 +60,12 @@ export default function Today() {
     );
   }
 
-  const needsAttention = (opportunities || []).filter(
-    (o) => o.status === "Needs Review" || o.status === "Needs Response" || o.status === "Needs Attention"
-  );
-  const followUpsNeeded = needsAttention.length;
-  const completedActions = (actions || []).filter((a) => a.status === "Completed").length;
-  const activeOpps = (opportunities || []).filter((o) => o.status !== "Dismissed");
+  // The dashboard prioritizes what is actually outstanding: New needs review,
+  // In Progress is being handled, Resolved is done.
+  const newOpps = (opportunities || []).filter((o) => lifecycleStatus(o.status) === "New");
+  const inProgressOpps = (opportunities || []).filter((o) => lifecycleStatus(o.status) === "In Progress");
+  const resolvedCount = (opportunities || []).filter((o) => lifecycleStatus(o.status) === "Resolved").length;
+  const activeOpps = [...newOpps, ...inProgressOpps];
   const potentialMin = activeOpps.reduce((sum, o) => sum + (o.estimated_value_min || 0), 0);
   const potentialMax = activeOpps.reduce((sum, o) => sum + (o.estimated_value_max || 0), 0);
 
@@ -78,10 +82,10 @@ export default function Today() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
-        <StatCard icon={Target} label="Opportunities Found" value={opportunities?.length || 0} accent="primary" />
-        <StatCard icon={Bell} label="Follow-ups Needed" value={followUpsNeeded} accent="accent" />
-        <StatCard icon={DollarSign} label="Potential Value" value={formatValueRange(potentialMin, potentialMax)} accent="emerald" />
-        <StatCard icon={CheckCircle2} label="Completed Actions" value={completedActions} accent="blue" />
+        <StatCard icon={Bell} label="New — needs review" value={newOpps.length} accent="accent" />
+        <StatCard icon={Target} label="In Progress" value={inProgressOpps.length} accent="primary" />
+        <StatCard icon={DollarSign} label="Potential Value (active)" value={formatValueRange(potentialMin, potentialMax)} accent="emerald" />
+        <StatCard icon={CheckCircle2} label="Resolved" value={resolvedCount} accent="blue" />
       </div>
 
       {/* Needs Attention */}
@@ -93,7 +97,7 @@ export default function Today() {
           </Link>
         </div>
 
-        {needsAttention.length === 0 ? (
+        {activeOpps.length === 0 ? (
           <div className="bg-card rounded-xl border border-border p-8 text-center">
             <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-3" />
             <p className="text-sm font-medium text-foreground">You're all caught up</p>
@@ -101,7 +105,7 @@ export default function Today() {
           </div>
         ) : (
           <div className="space-y-3">
-            {needsAttention.slice(0, 5).map((opp) => (
+            {activeOpps.slice(0, 5).map((opp) => (
               <Link
                 key={opp.id}
                 to={`/opportunities/${opp.id}`}
@@ -119,7 +123,7 @@ export default function Today() {
                   </div>
                   <div className="flex sm:flex-col sm:items-end gap-2 sm:gap-1">
                     <div className="text-sm font-semibold text-foreground">{formatValueRange(opp.estimated_value_min, opp.estimated_value_max)}</div>
-                    <StatusBadge status={opp.status} />
+                    <StatusBadge status={lifecycleStatus(opp.status)} />
                   </div>
                 </div>
               </Link>

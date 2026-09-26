@@ -24,7 +24,7 @@ export function generateDemoOpportunities(restaurantId) {
       value_confidence: "Medium",
       value_basis: "80 guests × $18–$30 per person (demo pricing assumption).",
       priority: "high",
-      status: "Needs Review",
+      status: "New",
       draft_status: "Draft",
       recommended_action:
         "Reply to Maria to gather service style, dietary needs, and budget details, then prepare a catering proposal for 80 guests.",
@@ -53,7 +53,7 @@ export function generateDemoOpportunities(restaurantId) {
       value_basis:
         "40 guests × $50–$75 per person for a private evening event (demo pricing assumption).",
       priority: "high",
-      status: "Needs Response",
+      status: "New",
       draft_status: "Draft",
       recommended_action:
         "Reply to James to gather his preferences for the evening, then confirm patio availability for October 19th before sharing options.",
@@ -81,7 +81,7 @@ export function generateDemoOpportunities(restaurantId) {
       value_confidence: "Low",
       value_basis: "25 guests × $32–$60 per person (demo pricing assumption).",
       priority: "medium",
-      status: "Needs Response",
+      status: "New",
       draft_status: "Draft",
       recommended_action:
         "Reply to Sarah promptly to keep the inquiry warm — ask for her preferred date so availability can be confirmed.",
@@ -109,7 +109,7 @@ export function generateDemoOpportunities(restaurantId) {
       value_confidence: "Medium",
       value_basis: "The customer's previous $1,800 catering order.",
       priority: "medium",
-      status: "Needs Response",
+      status: "New",
       draft_status: "Draft",
       recommended_action:
         "Reply to Michael to confirm the date, guest count, and menu preferences for his upcoming event.",
@@ -165,7 +165,7 @@ export function generateDemoOpportunities(restaurantId) {
       value_confidence: "Low",
       value_basis: "A typical visit for a party of two (demo assumption).",
       priority: "low",
-      status: "Completed",
+      status: "Resolved",
       draft_status: "Approved",
       recommended_action:
         "Response approved with gluten-free options — the customer confirmed they'll visit this weekend.",

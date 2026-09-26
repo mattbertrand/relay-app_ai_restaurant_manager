@@ -5,8 +5,9 @@ import {
   conversationOutcomeFor,
 } from "./emailAnalysis.ts";
 import {
-  findOpenOpportunityByTitle,
-  openOpportunityTitlesFor,
+  findOpportunityByTitle,
+  opportunityTitlesFor,
+  linkFollowup,
 } from "./dedupe.ts";
 
 const MAX_REPROCESS = 20;
@@ -30,6 +31,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     connected: true,
     reprocessed: 0,
     followupsLinked: 0,
+    reopened: 0,
     opportunitiesCreated: 0,
     opportunitiesUpdated: 0,
     opportunitiesRemoved: 0,
@@ -53,7 +55,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         subject: convo.subject,
         body,
       }, {
-        existingOpportunityTitles: openOpportunityTitlesFor(opps, convo.customer_email, convo.opportunity_id),
+        existingOpportunityTitles: opportunityTitlesFor(opps, convo.customer_email, convo.opportunity_id),
       });
     } catch (e) {
       // Analysis failed — keep the email visible and flagged for manual review
@@ -68,34 +70,44 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
 
     const linkedOpp = convo.opportunity_id ? await findOpportunity(base44, convo.opportunity_id) : null;
     const untouchedDraft =
-      linkedOpp && linkedOpp.status === "Needs Attention" && linkedOpp.draft_status === "Draft";
+      linkedOpp &&
+      ["New", "Needs Attention"].includes(linkedOpp.status) &&
+      linkedOpp.draft_status === "Draft";
     const classification = analysis.classification || "routine";
 
     if (classification === "opportunity") {
-      // A follow-up about a matter already tracked: link it, don't duplicate it
+      // A follow-up about a matter already tracked: link it, don't duplicate it.
+      // The linked opportunity itself may be the resolved matter the customer
+      // is following up on — reopening it keeps the thread continuous.
+      const resolvedSelf =
+        linkedOpp && linkedOpp.status === "Resolved" && analysis.followup_of === linkedOpp.title
+          ? linkedOpp
+          : null;
       const relatedOpp =
         analysis.is_followup && (!linkedOpp || untouchedDraft)
-          ? findOpenOpportunityByTitle(opps, convo.customer_email, analysis.followup_of, convo.opportunity_id)
+          ? findOpportunityByTitle(opps, convo.customer_email, analysis.followup_of, convo.opportunity_id)
           : null;
-      if (relatedOpp) {
-        if (linkedOpp && untouchedDraft) {
+      const targetOpp = resolvedSelf || relatedOpp;
+      if (targetOpp) {
+        if (linkedOpp && untouchedDraft && linkedOpp.id !== targetOpp.id) {
           await base44.entities.Action.deleteMany({ opportunity_id: linkedOpp.id });
           await base44.entities.Activity.deleteMany({ opportunity_id: linkedOpp.id });
           await base44.entities.Opportunity.delete(linkedOpp.id);
           summary.opportunitiesRemoved++;
         }
+        const reopened = await linkFollowup(base44, {
+          restaurantId,
+          opportunity: targetOpp,
+          customerName: convo.customer_name,
+          priority: analysis.priority,
+        });
         await base44.entities.Conversation.update(convo.id, {
-          opportunity_id: relatedOpp.id,
+          opportunity_id: targetOpp.id,
           status: "Opportunity",
           analysis_status: "Opportunity",
         });
-        await base44.entities.Activity.create({
-          restaurant_id: restaurantId,
-          opportunity_id: relatedOpp.id,
-          type: "message_reviewed",
-          description: `Follow-up from ${convo.customer_name} linked to existing opportunity: ${relatedOpp.title}`,
-        });
         summary.followupsLinked++;
+        if (reopened) summary.reopened++;
         continue;
       }
       const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || "Business inquiry";
@@ -127,7 +139,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
           restaurant_id: restaurantId,
           customer_name: convo.customer_name,
           customer_email: convo.customer_email,
-          status: "Needs Attention",
+          status: "New",
           draft_status: "Draft",
           is_demo: false,
           ...fields,
