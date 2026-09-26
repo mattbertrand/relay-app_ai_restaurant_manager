@@ -15,6 +15,7 @@ import {
   BookOpen, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 
 const TABS = [
   { label: "Restaurant", icon: Store },
@@ -44,6 +45,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({});
+  const [baseline, setBaseline] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -59,6 +61,14 @@ export default function Settings() {
         city: r.city || "",
         restaurant_type: r.restaurant_type || "",
       });
+      setBaseline(JSON.stringify({
+        name: r.name || "",
+        email: r.email || "",
+        phone: r.phone || "",
+        website: r.website || "",
+        city: r.city || "",
+        restaurant_type: r.restaurant_type || "",
+      }));
     } catch (err) {
       console.error(err);
     } finally {
@@ -69,18 +79,38 @@ export default function Settings() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleSave = async () => {
+    if (saving) return false;
     setSaving(true);
     try {
       await base44.entities.Restaurant.update(restaurant.id, form);
+      setBaseline(JSON.stringify(form));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+      return true;
     } catch (err) {
       console.error(err);
       alert("Something went wrong. Please try again.");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  const dirty = !!restaurant && !!baseline && JSON.stringify(form) !== baseline;
+
+  // Block navigation away while there are unsaved edits — the shared guard
+  // offers to save them first.
+  useEffect(() => {
+    if (!dirty) return;
+    setUnsavedChanges({
+      isDirty: () => JSON.stringify(form) !== baseline,
+      save: async () => {
+        const ok = await handleSave();
+        if (!ok) throw new Error("Save failed");
+      },
+    });
+    return () => clearUnsavedChanges();
+  });
 
   const handleLogout = () => {
     logout(false);

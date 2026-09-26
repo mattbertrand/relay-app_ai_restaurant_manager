@@ -23,6 +23,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { activityLabel, isUserFacingActivity } from "@/lib/activityLabels";
 import { cn } from "@/lib/utils";
+import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 
 const DRAFT_STATUS_STYLES = {
   Draft: "bg-stone-100 text-stone-500 border-stone-200",
@@ -93,6 +94,7 @@ export default function OpportunityDetail() {
   };
 
   const handleSaveDraft = async () => {
+    if (actionLoading) return false;
     setActionLoading(true);
     try {
       await base44.entities.Opportunity.update(id, {
@@ -108,13 +110,29 @@ export default function OpportunityDetail() {
       setOpp({ ...opp, draft_response: draft, draft_status: "Edited" });
       setEditing(false);
       setDraftUpdated(true);
+      return true;
     } catch (err) {
       console.error(err);
       alert("Something went wrong. Please try again.");
+      return false;
     } finally {
       setActionLoading(false);
     }
   };
+
+  // Block navigation away while the draft editor has unsaved edits —
+  // the shared guard offers to save them first.
+  useEffect(() => {
+    if (!editing || draft === (opp?.draft_response || "")) return;
+    setUnsavedChanges({
+      isDirty: () => true,
+      save: async () => {
+        const ok = await handleSaveDraft();
+        if (!ok) throw new Error("Save failed");
+      },
+    });
+    return () => clearUnsavedChanges();
+  });
 
   const handleApprove = async () => {
     setActionLoading(true);

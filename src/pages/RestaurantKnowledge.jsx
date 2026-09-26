@@ -16,6 +16,7 @@ import {
   UtensilsCrossed, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 
 const SECTIONS = [
   { id: "basics", label: "Basics", icon: MapPin, title: "Basic restaurant information", description: "Address and contact details Relay can use to answer customer questions." },
@@ -33,6 +34,7 @@ export default function RestaurantKnowledge() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [baseline, setBaseline] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -42,6 +44,7 @@ export default function RestaurantKnowledge() {
       const record = records[0] || null;
       setRecordId(record ? record.id : null);
       setKnowledge(knowledgeWithDefaults(record));
+      setBaseline(JSON.stringify(knowledgeWithDefaults(record)));
     } catch (err) {
       console.error(err);
     } finally {
@@ -54,6 +57,7 @@ export default function RestaurantKnowledge() {
   const setField = (field) => (v) => setKnowledge((k) => ({ ...k, [field]: v }));
 
   const handleSave = async () => {
+    if (saving) return false;
     setSaving(true);
     try {
       const rid = getRestaurantId(user);
@@ -64,15 +68,34 @@ export default function RestaurantKnowledge() {
         const created = await base44.entities.RestaurantKnowledge.create(payload);
         setRecordId(created.id);
       }
+      setBaseline(JSON.stringify(payload));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+      return true;
     } catch (err) {
       console.error(err);
       alert("Something went wrong. Please try again.");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  const dirty = !!knowledge && !!baseline && JSON.stringify(knowledge) !== baseline;
+
+  // Block navigation away while there are unsaved edits — the shared guard
+  // offers to save them first.
+  useEffect(() => {
+    if (!dirty) return;
+    setUnsavedChanges({
+      isDirty: () => JSON.stringify(knowledge) !== baseline,
+      save: async () => {
+        const ok = await handleSave();
+        if (!ok) throw new Error("Save failed");
+      },
+    });
+    return () => clearUnsavedChanges();
+  });
 
   if (loading || !knowledge) {
     return (

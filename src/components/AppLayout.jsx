@@ -5,6 +5,7 @@ import { getRestaurantId, getInitials } from "@/lib/format";
 import { Sun, Target, Inbox, CheckSquare, Settings, LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import UnsavedChangesGuard from "@/components/UnsavedChangesGuard";
 
 const ICON_MAP = { Sun, Target, Inbox, CheckSquare, Settings };
 
@@ -164,6 +165,8 @@ export default function AppLayout() {
           );
         })}
       </nav>
+
+      <UnsavedChangesGuard />
     </div>
   );
 }
