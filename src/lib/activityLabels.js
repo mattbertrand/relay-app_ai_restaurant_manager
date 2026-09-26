@@ -13,6 +13,7 @@ export const ACTIVITY_LABELS = {
   opportunity_dismissed: "Opportunity dismissed",
   followup_linked: "Customer follow-up received",
   message_reviewed: "Message re-reviewed",
+  reply_recorded: "Reply recorded",
 };
 
 // Internal bookkeeping that never belongs in the manager-facing history.

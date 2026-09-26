@@ -27,6 +27,7 @@ export default function Inbox() {
   const [lastSync, setLastSync] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [correcting, setCorrecting] = useState(null);
+  const [replyBusy, setReplyBusy] = useState(false);
   const syncedRef = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -89,6 +90,48 @@ export default function Inbox() {
       loadData();
     } catch (err) {
       console.error(err);
+    }
+  }, [loadData]);
+
+  // Undo a mistaken review/archive — only the inbox lifecycle changes; the
+  // analysis classification and any linked opportunity stay untouched.
+  const moveToNew = useCallback(async (convo) => {
+    try {
+      await base44.entities.Conversation.update(convo.id, { status: "New" });
+      loadData();
+    } catch (err) {
+      console.error(err);
+    }
+  }, [loadData]);
+
+  // Save an edited suggested reply without recording it yet.
+  const saveReplyDraft = useCallback(async (convo, text) => {
+    await base44.entities.Conversation.update(convo.id, { draft_response: text });
+    loadData();
+  }, [loadData]);
+
+  // Record the manager's reply for an Attention message. The reply is stored
+  // on the conversation and logged as activity — no email is sent.
+  const markReplied = useCallback(async (convo, text) => {
+    setReplyBusy(true);
+    try {
+      await base44.entities.Conversation.update(convo.id, {
+        draft_response: text,
+        reply_status: "Reply recorded",
+        replied_at: new Date().toISOString(),
+        status: "Reviewed",
+      });
+      await base44.entities.Activity.create({
+        restaurant_id: convo.restaurant_id,
+        type: "reply_recorded",
+        description: `Reply recorded for ${convo.customer_name} — "${convo.subject}"`,
+        is_demo: !!convo.is_demo,
+      });
+      loadData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReplyBusy(false);
     }
   }, [loadData]);
 
@@ -228,6 +271,10 @@ export default function Inbox() {
                   onReview={markReviewed}
                   onArchive={archiveConversation}
                   onCorrect={setCorrecting}
+                  onSaveReplyDraft={saveReplyDraft}
+                  onMarkReplied={markReplied}
+                  onMoveToNew={moveToNew}
+                  replyBusy={replyBusy}
                 />
                 {similar.length > 0 && (
                   <div className="pl-2 md:pl-4">
@@ -252,6 +299,10 @@ export default function Inbox() {
                             onReview={markReviewed}
                             onArchive={archiveConversation}
                             onCorrect={setCorrecting}
+                            onSaveReplyDraft={saveReplyDraft}
+                            onMarkReplied={markReplied}
+                            onMoveToNew={moveToNew}
+                            replyBusy={replyBusy}
                           />
                         ))}
                       </div>

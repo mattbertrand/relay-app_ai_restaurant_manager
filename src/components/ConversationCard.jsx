@@ -1,16 +1,17 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import StatusBadge from "@/components/StatusBadge";
+import AttentionReply from "@/components/AttentionReply";
 import { Button } from "@/components/ui/button";
-import { Mail, Check, Archive, AlertCircle } from "lucide-react";
+import { Mail, Check, Archive, AlertCircle, Undo2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { categoryLabel } from "@/lib/classification";
 
 // One inbox conversation. The Inbox lifecycle (New → Reviewed → Archived) is
 // the state of the message itself — separate from the related opportunity's
 // New → In Progress → Resolved lifecycle.
-export default function ConversationCard({ convo, isLive, onReview, onArchive, onCorrect }) {
-  const showActions = isLive && convo.status !== "Archived";
+export default function ConversationCard({ convo, isLive, onReview, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy }) {
+  const showActions = isLive;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 md:p-5">
@@ -51,10 +52,12 @@ export default function ConversationCard({ convo, isLive, onReview, onArchive, o
           )}
           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
           {isLive && convo.draft_response && convo.analysis_status === "Attention" && (
-            <div className="mt-3 rounded-lg bg-muted/60 border border-border p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Suggested reply</p>
-              <p className="text-sm text-foreground whitespace-pre-line line-clamp-5">{convo.draft_response}</p>
-            </div>
+            <AttentionReply
+              convo={convo}
+              onSaveDraft={onSaveReplyDraft}
+              onMarkReplied={onMarkReplied}
+              busy={replyBusy}
+            />
           )}
           {convo.opportunity_id && (
             <Link
@@ -80,6 +83,16 @@ export default function ConversationCard({ convo, isLive, onReview, onArchive, o
                   onClick={() => onArchive && onArchive(convo)}
                 >
                   <Archive className="w-3.5 h-3.5 mr-1.5" /> Archive
+                </Button>
+              )}
+              {(convo.status === "Reviewed" || convo.status === "Archived") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => onMoveToNew && onMoveToNew(convo)}
+                >
+                  <Undo2 className="w-3.5 h-3.5 mr-1.5" /> Move back to New
                 </Button>
               )}
               {onCorrect && (

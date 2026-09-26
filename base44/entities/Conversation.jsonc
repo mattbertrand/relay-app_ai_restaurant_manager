@@ -61,6 +61,20 @@
       "type": "string",
       "description": "For attention messages: Relay's suggested reply, often a full answer grounded in the restaurant's verified knowledge. Empty for opportunities (their draft lives on the Opportunity) and for routine/spam."
     },
+    "reply_status": {
+      "type": "string",
+      "enum": [
+        "Not replied",
+        "Reply recorded"
+      ],
+      "default": "Not replied",
+      "description": "Whether the manager has recorded a reply for this Attention message. Recording a reply in Relay does not send an email to the customer."
+    },
+    "replied_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the reply was recorded in Relay."
+    },
     "is_demo": {
       "type": "boolean",
       "default": false

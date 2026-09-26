@@ -26,6 +26,7 @@ const ACTIVITY_ICONS = {
   opportunity_reopened: Bell,
   followup_linked: Bell,
   status_update: Clock,
+  reply_recorded: Mail,
 };
 
 export default function Today() {
