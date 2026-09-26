@@ -50,6 +50,12 @@ export default function ConversationCard({ convo, isLive, onReview, onArchive, o
             </p>
           )}
           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
+          {isLive && convo.draft_response && convo.analysis_status === "Attention" && (
+            <div className="mt-3 rounded-lg bg-muted/60 border border-border p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Suggested reply</p>
+              <p className="text-sm text-foreground whitespace-pre-line line-clamp-5">{convo.draft_response}</p>
+            </div>
+          )}
           {convo.opportunity_id && (
             <Link
               to={`/opportunities/${convo.opportunity_id}`}

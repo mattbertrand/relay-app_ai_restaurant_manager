@@ -57,6 +57,10 @@
       "type": "string",
       "description": "Short phrase naming the customer's or sender's intent, e.g. 'Operating Hours', 'Reservation Request'."
     },
+    "draft_response": {
+      "type": "string",
+      "description": "For attention messages: Relay's suggested reply, often a full answer grounded in the restaurant's verified knowledge. Empty for opportunities (their draft lives on the Opportunity) and for routine/spam."
+    },
     "is_demo": {
       "type": "boolean",
       "default": false

@@ -100,6 +100,11 @@ export function conversationUpdatesFor(classification, analysis = {}) {
   const updates = { ...conversationOutcomeFor(classification) };
   if (analysis.category) updates.category = analysis.category;
   if (analysis.intent) updates.intent = analysis.intent;
+  // Attention messages carry Relay's suggested reply — with a filled-in
+  // restaurant profile it often fully answers the question (e.g. verified
+  // Sunday hours). Opportunity drafts live on the Opportunity itself, and
+  // routine/spam have none; re-classification clears any stale draft.
+  updates.draft_response = classification === "attention" ? analysis.draft_response || "" : "";
   return updates;
 }
 
