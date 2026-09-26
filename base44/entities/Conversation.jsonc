@@ -18,7 +18,8 @@
       "type": "string"
     },
     "status": {
-      "type": "string"
+      "type": "string",
+      "description": "Inbox lifecycle of the message itself: New, Reviewed, or Archived. Separate from the underlying opportunity's status."
     },
     "source": {
       "type": "string"
@@ -47,6 +48,14 @@
         "Spam",
         "Needs review"
       ]
+    },
+    "category": {
+      "type": "string",
+      "description": "What the email represents, e.g. reservation, job_application, general_customer_inquiry."
+    },
+    "intent": {
+      "type": "string",
+      "description": "Short phrase naming the customer's or sender's intent, e.g. 'Operating Hours', 'Reservation Request'."
     },
     "is_demo": {
       "type": "boolean",

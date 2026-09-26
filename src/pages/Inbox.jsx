@@ -5,10 +5,13 @@ import EmptyState from "@/components/EmptyState";
 import ConversationCard from "@/components/ConversationCard";
 import { Button } from "@/components/ui/button";
 import { conversationGroupKey, pickPrimaryConversation } from "@/lib/dedupe";
+import CorrectionDialog from "@/components/CorrectionDialog";
 import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const FILTERS = ["All", "New", "Needs Attention", "Opportunity", "Reviewed", "Closed"];
+// Inbox message lifecycle — what happened with this email. Separate from the
+// opportunity lifecycle (New → In Progress → Resolved) on the Opportunities page.
+const FILTERS = ["All", "New", "Reviewed", "Archived"];
 const SOURCES = [
   { label: "All", value: "all" },
   { label: "Demo data", value: "demo" },
@@ -23,6 +26,7 @@ export default function Inbox() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [correcting, setCorrecting] = useState(null);
   const syncedRef = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -67,6 +71,26 @@ export default function Inbox() {
       runSync(true);
     }
   }, [loadData, runSync]);
+
+  // Handling an email ends its inbox lifecycle so ordinary messages don't
+  // stay "New" forever.
+  const markReviewed = useCallback(async (convo) => {
+    try {
+      await base44.entities.Conversation.update(convo.id, { status: "Reviewed" });
+      loadData();
+    } catch (err) {
+      console.error(err);
+    }
+  }, [loadData]);
+
+  const archiveConversation = useCallback(async (convo) => {
+    try {
+      await base44.entities.Conversation.update(convo.id, { status: "Archived" });
+      loadData();
+    } catch (err) {
+      console.error(err);
+    }
+  }, [loadData]);
 
   const filtered = (conversations || []).filter((c) => {
     const statusOk = filter === "All" || c.status === filter;
@@ -198,7 +222,13 @@ export default function Inbox() {
             const similar = similarByPrimaryId.get(convo.id) || [];
             return (
               <div key={convo.id}>
-                <ConversationCard convo={convo} isLive={isLive(convo)} />
+                <ConversationCard
+                  convo={convo}
+                  isLive={isLive(convo)}
+                  onReview={markReviewed}
+                  onArchive={archiveConversation}
+                  onCorrect={setCorrecting}
+                />
                 {similar.length > 0 && (
                   <div className="pl-2 md:pl-4">
                     <button
@@ -215,7 +245,14 @@ export default function Inbox() {
                     {expandedGroups[convo.id] && (
                       <div className="mt-3 space-y-3 border-l-2 border-border pl-3 md:pl-4">
                         {similar.map((c) => (
-                          <ConversationCard key={c.id} convo={c} isLive={isLive(c)} />
+                          <ConversationCard
+                            key={c.id}
+                            convo={c}
+                            isLive={isLive(c)}
+                            onReview={markReviewed}
+                            onArchive={archiveConversation}
+                            onCorrect={setCorrecting}
+                          />
                         ))}
                       </div>
                     )}
@@ -226,6 +263,13 @@ export default function Inbox() {
           })}
         </div>
       )}
+
+      <CorrectionDialog
+        open={!!correcting}
+        onOpenChange={(o) => { if (!o) setCorrecting(null); }}
+        convo={correcting}
+        onDone={loadData}
+      />
     </div>
   );
 }

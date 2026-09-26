@@ -21,6 +21,7 @@ import {
   MessageSquare, Lightbulb, Clock, Sparkles, CheckCircle2, Check, Info, RotateCcw,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
+import { activityLabel, isUserFacingActivity } from "@/lib/activityLabels";
 import { cn } from "@/lib/utils";
 
 const DRAFT_STATUS_STYLES = {
@@ -382,18 +383,23 @@ export default function OpportunityDetail() {
         </div>
       )}
 
-      {/* Activity history — this opportunity only */}
+      {/* Activity history — this opportunity only, newest first, real
+          timestamps, technical bookkeeping hidden */}
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-foreground mb-3">Activity History</h2>
-        {(!activities || activities.length === 0) ? (
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground">Activity History</h2>
+          <span className="text-xs text-muted-foreground">Most recent first</span>
+        </div>
+        {(activities || []).filter(isUserFacingActivity).length === 0 ? (
           <p className="text-sm text-muted-foreground">No activity recorded for this opportunity yet.</p>
         ) : (
           <div className="bg-card rounded-xl border border-border divide-y divide-border">
-            {activities.map((act) => (
+            {activities.filter(isUserFacingActivity).map((act) => (
               <div key={act.id} className="flex items-start gap-3 p-4">
-                <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
                 <div>
-                  <p className="text-sm text-foreground">{act.description}</p>
+                  <p className="text-sm font-medium text-foreground">{activityLabel(act)}</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">{act.description}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{formatDateTime(act.created_date)}</p>
                 </div>
               </div>

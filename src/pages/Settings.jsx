@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import GmailIntegrationCard from "@/components/GmailIntegrationCard";
@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Store, Users, Bell, MessageSquare, ShieldCheck, User as UserIcon,
   Mail, Calendar, Phone, Globe, Instagram, Facebook, Save, Loader2, Check,
+  BookOpen, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +117,27 @@ export default function Settings() {
       </div>
 
       {tab === "Restaurant" && (
+        <div className="space-y-5">
+        <div className="bg-card rounded-xl border border-primary/20 p-5 md:p-6">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-heading text-lg font-semibold text-foreground mb-1">Restaurant Knowledge</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Teach Relay your hours, reservation rules, event capacity, catering options, menu, and
+                policies. Relay uses only what you enter here — it never invents facts.
+              </p>
+              <Link
+                to="/knowledge"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-3"
+              >
+                Manage restaurant knowledge <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
         <div className="bg-card rounded-xl border border-border p-6">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-1">Restaurant Information</h2>
           <p className="text-sm text-muted-foreground mb-5">Keep your restaurant details up to date.</p>
@@ -151,6 +173,7 @@ export default function Settings() {
             </Button>
             {saved && <span className="text-sm text-emerald-600 flex items-center gap-1"><Check className="w-4 h-4" /> Saved</span>}
           </div>
+        </div>
         </div>
       )}
 

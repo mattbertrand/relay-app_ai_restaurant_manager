@@ -7,13 +7,21 @@ import {
   parseFromAddress,
   extractTextBody,
 } from "../../shared/gmailApi.ts";
-import { analyzeEmail, opportunityTypeFor, conversationOutcomeFor } from "../../shared/emailAnalysis.ts";
+import { analyzeEmail, opportunityTypeFor, conversationUpdatesFor } from "../../shared/emailAnalysis.ts";
 import {
   findDuplicateConversation,
   findOpportunityByTitle,
   opportunityTitlesFor,
   linkFollowup,
+  findRelatedConversation,
+  mergeConversations,
 } from "../../shared/dedupe.ts";
+import {
+  loadKnowledge,
+  loadRecentFeedback,
+  formatKnowledgeForPrompt,
+  formatCorrectionsForPrompt,
+} from "../../shared/restaurantKnowledge.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
 
 // Gmail sync for Relay — imports new mail, classifies it, and supports reprocessing.
@@ -39,6 +47,16 @@ export default async function(req) {
     }
 
     const restaurant = await base44.entities.Restaurant.get(restaurantId);
+
+    // Verified restaurant knowledge and this restaurant's manager corrections
+    // steer the analysis: facts the manager entered are authoritative, and a
+    // rule learned from one restaurant never affects another restaurant.
+    const [knowledgeRecord, feedback] = await Promise.all([
+      loadKnowledge(base44, restaurantId),
+      loadRecentFeedback(base44, restaurantId),
+    ]);
+    const knowledgeContext = formatKnowledgeForPrompt(knowledgeRecord);
+    const corrections = formatCorrectionsForPrompt(feedback);
 
     // Load existing records for duplicate and thread protection
     const [existingMsgs, convos, customers, opps] = await Promise.all([
@@ -90,6 +108,7 @@ export default async function(req) {
       opportunitiesCreated: 0,
       followupsLinked: 0,
       reopened: 0,
+      relatedMerged: 0,
       attentionFlagged: 0,
       needsReview: 0,
     };
@@ -232,13 +251,10 @@ export default async function(req) {
         });
 
         if (threadConvo) {
-          // Existing thread: attach the reply, don't duplicate the conversation
-          const nextStatus = threadConvo.opportunity_id
-            ? threadConvo.status
-            : threadConvo.status === 'Closed'
-              ? 'Closed'
-              : 'New';
-          await base44.entities.Conversation.update(threadConvo.id, { status: nextStatus });
+          // Existing thread: attach the reply, don't duplicate the conversation.
+          // Inbox status is separate from the opportunity lifecycle — a new
+          // customer reply makes the message New again until reviewed.
+          await base44.entities.Conversation.update(threadConvo.id, { status: 'New' });
 
           // A new customer message on a thread whose opportunity was resolved
           // reopens the matter — it is not finished after all
@@ -253,15 +269,12 @@ export default async function(req) {
               type: 'opportunity_reopened',
               description: `New customer message received — Opportunity reopened: ${threadOpp.title}`,
             });
-            await base44.entities.Conversation.update(threadConvo.id, { status: 'Opportunity' });
             summary.reopened++;
           }
         } else {
           // Same email arriving again (re-send, Gmail duplication, transfer retry)
           summary.duplicatesMerged++;
-          await base44.entities.Conversation.update(duplicateConvo.id, {
-            status: duplicateConvo.opportunity_id ? duplicateConvo.status : 'New',
-          });
+          await base44.entities.Conversation.update(duplicateConvo.id, { status: 'New' });
         }
         await base44.entities.Activity.create({
           restaurant_id: restaurantId,
@@ -305,12 +318,14 @@ export default async function(req) {
           body: item.body,
         }, {
           existingOpportunityTitles: opportunityTitlesFor(opps, item.senderEmail),
+          knowledgeContext,
+          corrections,
         });
       } catch (e) {
         // Analysis failed — keep the email visible and flag it for manual review
         await base44.entities.Conversation.update(item.convo.id, {
           analysis_status: 'Needs review',
-          status: 'Needs Attention',
+          status: 'New',
         });
         summary.needsReview++;
         continue;
@@ -333,8 +348,7 @@ export default async function(req) {
           });
           await base44.entities.Conversation.update(item.convo.id, {
             opportunity_id: relatedOpp.id,
-            status: 'Opportunity',
-            analysis_status: 'Opportunity',
+            ...conversationUpdatesFor('opportunity', analysis),
           });
           summary.followupsLinked++;
           if (reopened) summary.reopened++;
@@ -360,7 +374,7 @@ export default async function(req) {
           source: 'Gmail',
           original_message: originalMessage.slice(0, 8000),
           why_identified:
-            [analysis.customer_facts, analysis.relay_assessment].filter(Boolean).join(' ') +
+            [analysis.customer_facts, analysis.relay_assessment, analysis.knowledge_used].filter(Boolean).join(' ') +
             ` Relay flagged this with ${analysis.confidence || 'Medium'} confidence.`,
           draft_response: analysis.draft_response || '',
           is_demo: false,
@@ -369,8 +383,7 @@ export default async function(req) {
 
         await base44.entities.Conversation.update(item.convo.id, {
           opportunity_id: opp.id,
-          status: 'Opportunity',
-          analysis_status: 'Opportunity',
+          ...conversationUpdatesFor('opportunity', analysis),
         });
 
         if (analysis.draft_response) {
@@ -400,8 +413,32 @@ export default async function(req) {
         }
         summary.opportunitiesCreated++;
       } else {
-        await base44.entities.Conversation.update(item.convo.id, conversationOutcomeFor(classification));
+        await base44.entities.Conversation.update(
+          item.convo.id,
+          conversationUpdatesFor(classification, analysis)
+        );
         if (classification === 'attention') summary.attentionFlagged++;
+
+        // A follow-up about a matter that has no opportunity (e.g. a job
+        // application follow-up) joins the original conversation instead of
+        // appearing as an unrelated second message.
+        if (analysis.is_followup) {
+          const relatedConvo = findRelatedConversation(convos, {
+            senderEmail: item.senderEmail,
+            category: analysis.category,
+            excludeId: item.convo.id,
+          });
+          if (relatedConvo) {
+            await mergeConversations(base44, {
+              restaurantId,
+              fromConvo: item.convo,
+              toConvo: relatedConvo,
+              messages: existingMsgs,
+              description: `Follow-up from ${item.senderName} added to an existing conversation ("${relatedConvo.subject}")`,
+            });
+            summary.relatedMerged++;
+          }
+        }
       }
     }
 

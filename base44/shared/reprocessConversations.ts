@@ -2,16 +2,29 @@ import {
   analyzeEmail,
   opportunityTypeFor,
   CLASSIFICATION_LABELS,
-  conversationOutcomeFor,
+  conversationUpdatesFor,
 } from "./emailAnalysis.ts";
 import {
   findOpportunityByTitle,
   opportunityTitlesFor,
   linkFollowup,
+  findRelatedConversation,
+  mergeConversations,
 } from "./dedupe.ts";
+import {
+  loadKnowledge,
+  loadRecentFeedback,
+  formatKnowledgeForPrompt,
+  formatCorrectionsForPrompt,
+} from "./restaurantKnowledge.ts";
 
 const MAX_REPROCESS = 20;
 const REPROCESSABLE = ["Opportunity", "No opportunity", "Attention", "Routine", "Spam", "Needs review"];
+
+// Reprocessing re-classifies a message, but it never resets what the manager
+// has already done with it: reviewed/archived inbox state is preserved.
+const inboxStatus = (convo) =>
+  convo.status === "Reviewed" || convo.status === "Archived" ? convo.status : "New";
 
 async function findOpportunity(base44, id) {
   try {
@@ -27,6 +40,12 @@ async function findOpportunity(base44, id) {
 // has already reviewed, edited, or approved is left alone.
 export async function reprocessConversations({ base44, restaurantId, restaurantName, convos, messages }) {
   const opps = await base44.entities.Opportunity.filter({ restaurant_id: restaurantId }, null, 500);
+  const [knowledgeRecord, feedback] = await Promise.all([
+    loadKnowledge(base44, restaurantId),
+    loadRecentFeedback(base44, restaurantId),
+  ]);
+  const knowledgeContext = formatKnowledgeForPrompt(knowledgeRecord);
+  const corrections = formatCorrectionsForPrompt(feedback);
   const summary = {
     connected: true,
     reprocessed: 0,
@@ -56,12 +75,14 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         body,
       }, {
         existingOpportunityTitles: opportunityTitlesFor(opps, convo.customer_email, convo.opportunity_id),
+        knowledgeContext,
+        corrections,
       });
     } catch (e) {
       // Analysis failed — keep the email visible and flagged for manual review
       await base44.entities.Conversation.update(convo.id, {
         analysis_status: "Needs review",
-        status: "Needs Attention",
+        status: inboxStatus(convo),
       });
       summary.needsReview++;
       continue;
@@ -103,8 +124,8 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         });
         await base44.entities.Conversation.update(convo.id, {
           opportunity_id: targetOpp.id,
-          status: "Opportunity",
-          analysis_status: "Opportunity",
+          ...conversationUpdatesFor("opportunity", analysis),
+          status: inboxStatus(convo),
         });
         summary.followupsLinked++;
         if (reopened) summary.reopened++;
@@ -125,7 +146,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         source: "Gmail",
         original_message: originalMessage.slice(0, 8000),
         why_identified:
-          [analysis.customer_facts, analysis.relay_assessment].filter(Boolean).join(" ") +
+          [analysis.customer_facts, analysis.relay_assessment, analysis.knowledge_used].filter(Boolean).join(" ") +
           ` Relay flagged this with ${analysis.confidence || "Medium"} confidence.`,
         draft_response: analysis.draft_response || "",
       };
@@ -161,8 +182,8 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
 
       await base44.entities.Conversation.update(convo.id, {
         ...(oppId ? { opportunity_id: oppId } : {}),
-        status: "Opportunity",
-        analysis_status: "Opportunity",
+        ...conversationUpdatesFor("opportunity", analysis),
+        status: inboxStatus(convo),
       });
       await base44.entities.Activity.create({
         restaurant_id: restaurantId,
@@ -180,9 +201,34 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         await base44.entities.Conversation.update(convo.id, { opportunity_id: "" });
         summary.opportunitiesRemoved++;
       }
-      const outcome = conversationOutcomeFor(classification);
-      await base44.entities.Conversation.update(convo.id, outcome);
+      const outcome = conversationUpdatesFor(classification, analysis);
+      await base44.entities.Conversation.update(convo.id, {
+        ...outcome,
+        status: inboxStatus(convo),
+      });
       if (classification === "attention") summary.attentionFlagged++;
+
+      // A follow-up about a matter that has no opportunity (e.g. a job
+      // application follow-up) joins the original conversation instead of
+      // appearing as an unrelated second message.
+      if (analysis.is_followup) {
+        const relatedConvo = findRelatedConversation(convos, {
+          senderEmail: convo.customer_email,
+          category: analysis.category,
+          excludeId: convo.id,
+        });
+        if (relatedConvo && !relatedConvo.opportunity_id) {
+          await mergeConversations(base44, {
+            restaurantId,
+            fromConvo: convo,
+            toConvo: relatedConvo,
+            messages,
+            description: `Follow-up from ${convo.customer_name} added to an existing conversation ("${relatedConvo.subject}")`,
+          });
+          summary.relatedMerged = (summary.relatedMerged || 0) + 1;
+          continue;
+        }
+      }
       await base44.entities.Activity.create({
         restaurant_id: restaurantId,
         opportunity_id: linkedOpp && !untouchedDraft ? linkedOpp.id : "",

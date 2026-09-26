@@ -1,0 +1,51 @@
+{
+  "name": "RestaurantFeedback",
+  "type": "object",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "conversation_id": {
+      "type": "string"
+    },
+    "opportunity_id": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string",
+      "description": "The subject of the email the manager corrected, for future context."
+    },
+    "correction": {
+      "type": "string",
+      "enum": [
+        "should_be_opportunity",
+        "should_be_attention",
+        "should_be_routine",
+        "should_be_administrative",
+        "should_be_spam"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional explanation of why Relay got it wrong, in the manager's own words."
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "correction"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

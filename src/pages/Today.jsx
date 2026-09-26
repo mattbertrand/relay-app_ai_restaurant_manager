@@ -10,7 +10,8 @@ import PriorityBadge from "@/components/PriorityBadge";
 import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Bell, DollarSign, CheckCircle2, Target, ArrowRight, Activity as ActivityIcon, Clock, Mail } from "lucide-react";
+import { isUserFacingActivity } from "@/lib/activityLabels";
+import { TrendingUp, Bell, DollarSign, CheckCircle2, Target, ArrowRight, Activity as ActivityIcon, Clock, Mail, Inbox as InboxIcon } from "lucide-react";
 
 const ACTIVITY_ICONS = {
   opportunity_identified: Target,
@@ -23,6 +24,7 @@ const ACTIVITY_ICONS = {
   draft_edited: Clock,
   opportunity_resolved: CheckCircle2,
   opportunity_reopened: Bell,
+  followup_linked: Bell,
   status_update: Clock,
 };
 
@@ -31,18 +33,21 @@ export default function Today() {
   const [opportunities, setOpportunities] = useState(null);
   const [activities, setActivities] = useState(null);
   const [actions, setActions] = useState(null);
+  const [conversations, setConversations] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     try {
-      const [opps, acts, acts2] = await Promise.all([
+      const [opps, acts, acts2, convos] = await Promise.all([
         base44.entities.Opportunity.list("-created_date", 50),
         base44.entities.Activity.list("-created_date", 15),
         base44.entities.Action.list("-created_date", 50),
+        base44.entities.Conversation.list("-created_date", 100),
       ]);
       setOpportunities(opps);
       setActivities(acts);
       setActions(acts2);
+      setConversations(convos);
     } catch (err) {
       console.error(err);
     } finally {
@@ -66,6 +71,10 @@ export default function Today() {
   const inProgressOpps = (opportunities || []).filter((o) => lifecycleStatus(o.status) === "In Progress");
   const resolvedCount = (opportunities || []).filter((o) => lifecycleStatus(o.status) === "Resolved").length;
   const activeOpps = [...newOpps, ...inProgressOpps];
+  // Inbox messages flagged as worth a glance that haven't been reviewed yet
+  const inboxToReview = (conversations || []).filter(
+    (c) => c.analysis_status === "Attention" && c.status === "New"
+  ).length;
   const potentialMin = activeOpps.reduce((sum, o) => sum + (o.estimated_value_min || 0), 0);
   const potentialMax = activeOpps.reduce((sum, o) => sum + (o.estimated_value_max || 0), 0);
 
@@ -85,7 +94,7 @@ export default function Today() {
         <StatCard icon={Bell} label="New — needs review" value={newOpps.length} accent="accent" />
         <StatCard icon={Target} label="In Progress" value={inProgressOpps.length} accent="primary" />
         <StatCard icon={DollarSign} label="Potential Value (active)" value={formatValueRange(potentialMin, potentialMax)} accent="emerald" />
-        <StatCard icon={CheckCircle2} label="Resolved" value={resolvedCount} accent="blue" />
+        <StatCard icon={InboxIcon} label="Inbox — to review" value={inboxToReview} accent="blue" />
       </div>
 
       {/* Needs Attention */}
@@ -139,7 +148,7 @@ export default function Today() {
           <EmptyState icon={ActivityIcon} title="No activity yet" description="Actions and updates will appear here as you use Relay." />
         ) : (
           <div className="bg-card rounded-xl border border-border divide-y divide-border">
-            {activities.map((act) => {
+            {activities.filter(isUserFacingActivity).map((act) => {
               const Icon = ACTIVITY_ICONS[act.type] || ActivityIcon;
               return (
                 <div key={act.id} className="flex items-start gap-3 p-4">

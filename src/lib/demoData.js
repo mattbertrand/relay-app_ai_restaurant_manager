@@ -193,6 +193,8 @@ export function generateDemoConversations(restaurantId, opportunityIds) {
       message:
         "Hi, I'm organizing a corporate luncheon for about 80 people on October 15th and was wondering if you offer catering? We'd love a mix of appetizers and entrees. Could you send me some options and pricing? Thanks! — Maria",
       status: "New",
+      category: "catering",
+      intent: "Catering Request",
       source: "Email",
       is_demo: true,
     },
@@ -204,6 +206,8 @@ export function generateDemoConversations(restaurantId, opportunityIds) {
       message:
         "Hello, I'm planning a 40th birthday party for about 40 people and would love to use your patio. Are you available on Saturday, October 19th? What are the options and costs? Thanks, James",
       status: "New",
+      category: "private_event",
+      intent: "Private Event Request",
       source: "Website form",
       is_demo: true,
     },
@@ -215,6 +219,8 @@ export function generateDemoConversations(restaurantId, opportunityIds) {
       message:
         "Hi, is your patio available for private events? Looking to host something for about 25 people.",
       status: "New",
+      category: "general_customer_inquiry",
+      intent: "Private Event Availability",
       source: "Google Business Profile",
       is_demo: true,
     },
@@ -225,7 +231,9 @@ export function generateDemoConversations(restaurantId, opportunityIds) {
       subject: "Following up on summer catering",
       message:
         "Hi, we loved the catering you did for us in June. We might have another event coming up — can you send your updated menu?",
-      status: "Needs Attention",
+      status: "New",
+      category: "catering",
+      intent: "Catering Follow-up",
       source: "Email",
       is_demo: true,
     },
@@ -236,7 +244,9 @@ export function generateDemoConversations(restaurantId, opportunityIds) {
       subject: "Reservation for 12",
       message:
         "Hi, I'd like to make a reservation for 12 people this Friday at 7pm. Is that possible?",
-      status: "Needs Attention",
+      status: "New",
+      category: "reservation",
+      intent: "Reservation Request",
       source: "Phone",
       is_demo: true,
     },
@@ -247,7 +257,9 @@ export function generateDemoConversations(restaurantId, opportunityIds) {
       subject: "Gluten-free options?",
       message:
         "Do you have gluten-free options on your menu? Coming this weekend with a friend who has celiac.",
-      status: "Closed",
+      status: "Archived",
+      category: "general_customer_inquiry",
+      intent: "Dietary Question",
       source: "Instagram",
       is_demo: true,
     },

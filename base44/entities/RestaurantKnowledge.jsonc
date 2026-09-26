@@ -1,0 +1,130 @@
+{
+  "name": "RestaurantKnowledge",
+  "type": "object",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "zip": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "website": {
+      "type": "string"
+    },
+    "contact_email": {
+      "type": "string"
+    },
+    "hours": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Weekly operating hours keyed by day name, e.g. { Monday: { open: '11:00', close: '21:00', closed: false } }."
+    },
+    "temporary_hours": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Holiday closures, holiday hours, temporary closures, and special event hours with optional start/end dates."
+    },
+    "reservations": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Reservation rules: accepted, method, phone, email, website, max_party_size, max_party_without_approval, large_party_policy, cancellation_policy, no_show_policy, deposit_policy, time_restrictions, other_rules."
+    },
+    "private_events": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Private event details: offered, min_capacity, max_capacity, event_types, private_dining_options, policies, booking_process, contact, pricing."
+    },
+    "catering": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Catering details: offered, types, min_guests, max_guests, service_area, policies, booking_process, contact, pricing."
+    },
+    "happy_hour": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Happy hour details: offered, days, start_time, end_time, details."
+    },
+    "recurring_offerings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "days": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Recurring offerings such as brunch, live music, taco night, trivia, seasonal events."
+    },
+    "menu": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Menu and offerings: summary, vegetarian, vegan, gluten_free, allergens, kids_menu, takeout, delivery, gift_cards, loyalty_program, dietary_accommodations."
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Policies and FAQ answers: dress_code, pet_policy, parking, accessibility, outside_food_drinks, birthday_policy, cake_policy, decorations, age_restrictions, other."
+    },
+    "other_info": {
+      "type": "string",
+      "description": "Other verified information Relay should know about this restaurant."
+    }
+  },
+  "required": [
+    "restaurant_id"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { base44 } from "@/api/base44Client";
-import { NEW_STATUSES, lifecycleStatus } from "@/lib/opportunityLifecycle";
+import { NEW_STATUSES } from "@/lib/opportunityLifecycle";
 
 // Shared opportunity workflow actions, used by the opportunity detail page
 // and the actions page so the underlying data stays consistent everywhere.
@@ -36,15 +36,6 @@ export async function approveResponse(opp) {
     type: "response_approved",
     description: `Response approved for ${opp.customer_name}'s ${(opp.type || "").toLowerCase()} — recorded in Relay, no external message was sent`,
   });
-
-  if (lifecycleStatus(status) === "In Progress") {
-    await base44.entities.Activity.create({
-      restaurant_id: opp.restaurant_id,
-      opportunity_id: opp.id,
-      type: "status_update",
-      description: "Opportunity remains In Progress — the customer matter is still open",
-    });
-  }
 }
 
 export async function resolveOpportunity(opp, note) {

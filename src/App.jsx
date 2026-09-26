@@ -21,6 +21,7 @@ import OpportunityDetail from '@/pages/OpportunityDetail';
 import Inbox from '@/pages/Inbox';
 import Actions from '@/pages/Actions';
 import Settings from '@/pages/Settings';
+import RestaurantKnowledge from '@/pages/RestaurantKnowledge';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -61,6 +62,7 @@ const AuthenticatedApp = () => {
           <Route path="/opportunities/:id" element={<OpportunityDetail />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/actions" element={<Actions />} />
+          <Route path="/knowledge" element={<RestaurantKnowledge />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>

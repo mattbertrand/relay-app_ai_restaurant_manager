@@ -88,6 +88,49 @@ export function findOpportunityByTitle(opps, senderEmail, title, excludeId = "")
   );
 }
 
+// Finds an existing conversation from the same live sender carrying the same
+// category — used to merge related follow-ups (e.g. a job application
+// follow-up arriving as a brand-new thread) into the conversation they belong
+// to, instead of showing them as unrelated messages. Gmail thread/reply
+// relationships are matched earlier in the sync; this covers the rest.
+export function findRelatedConversation(convos, { senderEmail, category, excludeId = "" }) {
+  const email = (senderEmail || "").toLowerCase();
+  if (!email || !category) return null;
+  return (
+    convos.find(
+      (c) =>
+        c.id !== excludeId &&
+        !c.is_demo &&
+        c.source === "Gmail" &&
+        (c.customer_email || "").toLowerCase() === email &&
+        c.category === category
+    ) || null
+  );
+}
+
+// Moves a follow-up conversation's messages into the conversation it belongs
+// to and removes the duplicate record, so related messages read as one
+// continuous conversation in the Inbox.
+export async function mergeConversations(base44, { restaurantId, fromConvo, toConvo, messages, description }) {
+  const fromMsgs = (messages || []).filter((m) => m.conversation_id === fromConvo.id);
+  if (fromMsgs.length) {
+    await base44.entities.ConversationMessage.bulkUpdate(
+      fromMsgs.map((m) => ({ id: m.id, conversation_id: toConvo.id }))
+    );
+  }
+  await base44.entities.Conversation.update(toConvo.id, {
+    message: fromConvo.message || toConvo.message,
+    status: "New",
+  });
+  await base44.entities.Conversation.delete(fromConvo.id);
+  await base44.entities.Activity.create({
+    restaurant_id: restaurantId,
+    opportunity_id: toConvo.opportunity_id || "",
+    type: "email_received",
+    description,
+  });
+}
+
 // Links a follow-up message to an existing opportunity: bumps priority when the
 // new message is urgent, reopens a resolved matter, and records the activity.
 export async function linkFollowup(base44, { restaurantId, opportunity, customerName, priority }) {
@@ -106,7 +149,7 @@ export async function linkFollowup(base44, { restaurantId, opportunity, customer
   await base44.entities.Activity.create({
     restaurant_id: restaurantId,
     opportunity_id: opportunity.id,
-    type: reopened ? "opportunity_reopened" : "message_reviewed",
+    type: reopened ? "opportunity_reopened" : "followup_linked",
     description: reopened
       ? `New customer message received — Opportunity reopened: ${opportunity.title}`
       : `Follow-up from ${customerName} linked to existing opportunity: ${opportunity.title}`,
