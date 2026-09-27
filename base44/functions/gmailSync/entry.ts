@@ -82,6 +82,12 @@ export default async function(req) {
     customers.forEach((c) => {
       if (c.email) customersByEmail[c.email.toLowerCase()] = c;
     });
+    // Reply relationships (In-Reply-To / References) let a message that Gmail
+    // filed under a new thread ID still find the conversation it answers.
+    const convoIdByRfcId = {};
+    existingMsgs.forEach((m) => {
+      if (m.gmail_rfc_id) convoIdByRfcId[m.gmail_rfc_id.trim().toLowerCase()] = m.conversation_id;
+    });
 
     // Re-run the current analysis on live Gmail conversations classified by an
     // earlier version of the classifier (skips importing new mail)
@@ -164,6 +170,22 @@ export default async function(req) {
 
       let threadConvo = threadConvos[message.threadId] || null;
       let duplicateConvo = null;
+      if (!threadConvo) {
+        // A reply may carry a fresh Gmail thread ID — match it to the message
+        // it answers through the standard In-Reply-To / References headers.
+        const replyToIds = [
+          getHeader(message, 'In-Reply-To'),
+          ...getHeader(message, 'References').split(/\s+/),
+        ]
+          .map((v) => (v || '').trim().toLowerCase())
+          .filter(Boolean);
+        for (const rid of replyToIds) {
+          const convoId = convoIdByRfcId[rid];
+          if (!convoId) continue;
+          const target = convos.find((c) => c.id === convoId);
+          if (target) { threadConvo = target; break; }
+        }
+      }
       if (!threadConvo && fromEmail) {
         // Fresh database check so two overlapping syncs can't import the same
         // email twice, and so identical re-sends merge into the original
@@ -218,6 +240,7 @@ export default async function(req) {
           restaurant_id: restaurantId,
           conversation_id: convo.id,
           gmail_message_id: message.id,
+          gmail_rfc_id: getHeader(message, 'Message-ID'),
           sender_name: from.name,
           sender_email: from.email,
           body: body.slice(0, 10000),
@@ -244,6 +267,7 @@ export default async function(req) {
           restaurant_id: restaurantId,
           conversation_id: target.id,
           gmail_message_id: message.id,
+          gmail_rfc_id: getHeader(message, 'Message-ID'),
           sender_name: from.name,
           sender_email: from.email,
           body: body.slice(0, 10000),
@@ -271,6 +295,20 @@ export default async function(req) {
             });
             summary.reopened++;
           }
+
+          // A follow-up in an existing thread re-enters the Inbox as New and is
+          // re-analyzed below: the customer's new intent may deserve a fresh
+          // draft, a linked follow-up, or a new opportunity — while the thread
+          // history (ConversationMessage records) stays with this conversation.
+          toAnalyze.push({
+            convo: threadConvo,
+            subject,
+            body,
+            senderName: from.name,
+            senderEmail: from.email,
+            receivedAt,
+            isThreadReply: true,
+          });
         } else {
           // Same email arriving again (re-send, Gmail duplication, transfer retry)
           summary.duplicatesMerged++;
@@ -306,9 +344,24 @@ export default async function(req) {
       });
     }
 
-    // Analyze new threads (bounded batch — the rest are picked up on the next sync)
-    for (const item of toAnalyze.slice(0, MAX_ANALYZE)) {
+    // Analyze new threads (bounded batch — the rest are picked up on the next
+    // sync). Thread follow-ups are analyzed first: a reply in an existing
+    // conversation would otherwise never be re-picked-up by a later sync.
+    const analyzeOrder = [...toAnalyze].sort(
+      (a, b) => (b.isThreadReply ? 1 : 0) - (a.isThreadReply ? 1 : 0)
+    );
+    for (const item of analyzeOrder.slice(0, MAX_ANALYZE)) {
       summary.analyzed++;
+      // A follow-up in an existing thread: the conversation now shows the new
+      // message, and the reply workflow is available again for it.
+      const threadExtras = item.isThreadReply
+        ? {
+            message: item.body.slice(0, 4000),
+            received_at: item.receivedAt,
+            reply_status: 'Not replied',
+            replied_at: null,
+          }
+        : {};
       let analysis;
       try {
         analysis = await analyzeEmail(base44, restaurant.name || 'the restaurant', {
@@ -349,6 +402,7 @@ export default async function(req) {
           await base44.entities.Conversation.update(item.convo.id, {
             opportunity_id: relatedOpp.id,
             ...conversationUpdatesFor('opportunity', analysis),
+            ...threadExtras,
           });
           summary.followupsLinked++;
           if (reopened) summary.reopened++;
@@ -384,6 +438,7 @@ export default async function(req) {
         await base44.entities.Conversation.update(item.convo.id, {
           opportunity_id: opp.id,
           ...conversationUpdatesFor('opportunity', analysis),
+          ...threadExtras,
         });
 
         if (analysis.draft_response) {
@@ -413,16 +468,17 @@ export default async function(req) {
         }
         summary.opportunitiesCreated++;
       } else {
-        await base44.entities.Conversation.update(
-          item.convo.id,
-          conversationUpdatesFor(classification, analysis)
-        );
+        await base44.entities.Conversation.update(item.convo.id, {
+          ...conversationUpdatesFor(classification, analysis),
+          ...threadExtras,
+        });
         if (classification === 'attention') summary.attentionFlagged++;
 
         // A follow-up about a matter that has no opportunity (e.g. a job
         // application follow-up) joins the original conversation instead of
-        // appearing as an unrelated second message.
-        if (analysis.is_followup) {
+        // appearing as an unrelated second message. Thread replies already
+        // live in the right conversation — only brand-new threads are merged.
+        if (analysis.is_followup && !item.isThreadReply) {
           const relatedConvo = findRelatedConversation(convos, {
             senderEmail: item.senderEmail,
             category: analysis.category,

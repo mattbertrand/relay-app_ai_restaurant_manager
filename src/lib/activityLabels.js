@@ -14,6 +14,8 @@ export const ACTIVITY_LABELS = {
   followup_linked: "Customer follow-up received",
   message_reviewed: "Message re-reviewed",
   reply_recorded: "Reply recorded",
+  moved_to_new: "Moved back to New",
+  archived: "Archived",
 };
 
 // Internal bookkeeping that never belongs in the manager-facing history.

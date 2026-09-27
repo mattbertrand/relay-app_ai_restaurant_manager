@@ -4,8 +4,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Edit3, Save, CheckCircle2 } from "lucide-react";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 
-// Suggested reply for a live Attention message. "Mark as replied" records the
-// reply in Relay — no email is actually sent to the customer.
+// Suggested reply for a live Attention message. "Record Reply" records the
+// response in Relay — no email is actually sent to the customer.
 export default function AttentionReply({ convo, onSaveDraft, onMarkReplied, busy }) {
   const replied = convo.reply_status === "Reply recorded";
   const [editing, setEditing] = useState(false);
@@ -36,7 +36,7 @@ export default function AttentionReply({ convo, onSaveDraft, onMarkReplied, busy
     <div className="mt-3 rounded-lg bg-muted/60 border border-border p-3">
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <p className="text-xs font-medium text-muted-foreground">
-          {replied ? "Reply" : "Suggested reply"}
+          {replied ? "Recorded reply" : "Suggested reply"}
         </p>
         {replied && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -68,7 +68,7 @@ export default function AttentionReply({ convo, onSaveDraft, onMarkReplied, busy
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">
             {!replied && (
               <Button size="sm" onClick={() => onMarkReplied(convo, convo.draft_response)} disabled={busy}>
-                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Mark as replied
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Record Reply
               </Button>
             )}
             <Button size="sm" variant="outline" onClick={startEditing} disabled={busy}>
@@ -78,7 +78,7 @@ export default function AttentionReply({ convo, onSaveDraft, onMarkReplied, busy
           <p className="text-[11px] text-muted-foreground mt-2">
             {replied
               ? "Recorded in Relay — no email was sent to the customer."
-              : "Marking as replied records it in Relay — no email is sent to the customer."}
+              : "This records the response in Relay. No email will be sent to the customer."}
           </p>
         </>
       )}

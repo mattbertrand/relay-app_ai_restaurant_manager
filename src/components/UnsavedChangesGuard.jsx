@@ -1,19 +1,75 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save } from "lucide-react";
-import { getUnsavedChanges } from "@/lib/unsavedChanges";
+import { getUnsavedChanges, clearUnsavedChanges, onUnsavedChangesChange } from "@/lib/unsavedChanges";
 
-// Blocks in-app navigation (link clicks) and tab close while the current
-// page has unsaved edits, and asks whether to save them first.
+// Blocks navigation away from the current page while it has unsaved edits —
+// in-app links and the browser Back button — and asks what to do: stay, leave
+// without saving, or save first. A single instance lives in the app layout, so
+// the dialog never duplicates, and it only appears when there are real unsaved
+// edits (the page's isDirty check).
 export default function UnsavedChangesGuard() {
   const navigate = useNavigate();
-  const [pendingHref, setPendingHref] = useState(null);
+  const [pendingHref, setPendingHref] = useState(null); // link-click navigation
+  const [backPending, setBackPending] = useState(false); // Back-button navigation
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  const sentinelRef = useRef(false);
+
+  const open = !!pendingHref || backPending;
+
+  // While there are unsaved edits, keep an extra history entry on the same
+  // URL so a Back press lands on this page (not away from it) and the dialog
+  // can ask what to do.
+  useEffect(
+    () =>
+      onUnsavedChangesChange((reg) => {
+        if (reg && reg.isDirty() && !sentinelRef.current && window.history) {
+          try {
+            window.history.pushState(
+              { ...(window.history.state || {}), relayUnsavedGuard: true },
+              "",
+              window.location.href
+            );
+            sentinelRef.current = true;
+          } catch (e) {
+            /* history unsupported — in-app links are still guarded */
+          }
+        }
+      }),
+    []
+  );
+
+  // Back press while there are unsaved edits: re-anchor the extra entry and
+  // ask instead of letting the browser navigate away from the page.
+  useEffect(() => {
+    const onPopState = () => {
+      const reg = getUnsavedChanges();
+      if (!reg || !reg.isDirty()) {
+        sentinelRef.current = false;
+        return;
+      }
+      if (!sentinelRef.current) return;
+      try {
+        window.history.pushState(
+          { ...(window.history.state || {}), relayUnsavedGuard: true },
+          "",
+          window.location.href
+        );
+      } catch (e) {
+        return;
+      }
+      setSaveFailed(false);
+      setPendingHref(null);
+      setBackPending(true);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // Intercept clicks on in-app links (rendered as <a href="/...">) when the
   // page registered unsaved edits. Capture phase + stopPropagation so React
@@ -31,6 +87,7 @@ export default function UnsavedChangesGuard() {
       e.preventDefault();
       e.stopPropagation();
       setSaveFailed(false);
+      setBackPending(false);
       setPendingHref(href);
     };
     document.addEventListener("click", onClick, true);
@@ -53,20 +110,28 @@ export default function UnsavedChangesGuard() {
   const close = () => {
     if (saving) return;
     setPendingHref(null);
+    setBackPending(false);
     setSaveFailed(false);
   };
 
   const handleSaveAndLeave = async () => {
     const reg = getUnsavedChanges();
-    if (!reg) { setPendingHref(null); return; }
+    if (!reg) { close(); return; }
     setSaving(true);
     setSaveFailed(false);
     try {
       await reg.save();
-      const href = pendingHref;
       setSaving(false);
-      setPendingHref(null);
-      navigate(href);
+      clearUnsavedChanges();
+      if (backPending) {
+        // Past the extra history entry and the page entry before it.
+        setBackPending(false);
+        window.history.go(-2);
+      } else {
+        const href = pendingHref;
+        setPendingHref(null);
+        navigate(href);
+      }
     } catch (err) {
       console.error(err);
       setSaving(false);
@@ -75,20 +140,26 @@ export default function UnsavedChangesGuard() {
   };
 
   const handleLeaveWithoutSaving = () => {
-    const href = pendingHref;
-    setPendingHref(null);
-    navigate(href);
+    if (backPending) {
+      clearUnsavedChanges();
+      setBackPending(false);
+      window.history.go(-2);
+    } else {
+      const href = pendingHref;
+      setPendingHref(null);
+      navigate(href);
+    }
   };
 
   return (
-    <Dialog open={!!pendingHref} onOpenChange={(open) => { if (!open) close(); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>You have unsaved changes</DialogTitle>
+          <DialogTitle>Unsaved changes</DialogTitle>
           <DialogDescription>
             {saveFailed
               ? "We couldn't save your changes. Try again, leave without saving, or stay on this page."
-              : "Do you want to save your changes before leaving this page?"}
+              : "You have unsaved changes. What would you like to do?"}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="sm:space-x-2 gap-2">

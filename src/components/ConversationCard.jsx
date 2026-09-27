@@ -2,16 +2,19 @@ import React from "react";
 import { Link } from "react-router-dom";
 import StatusBadge from "@/components/StatusBadge";
 import AttentionReply from "@/components/AttentionReply";
+import DraftProvenance from "@/components/DraftProvenance";
+import ConversationOriginal from "@/components/ConversationOriginal";
 import { Button } from "@/components/ui/button";
-import { Mail, Check, Archive, AlertCircle, Undo2 } from "lucide-react";
+import { Mail, Archive, AlertCircle, Undo2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { categoryLabel } from "@/lib/classification";
 
-// One inbox conversation. The Inbox lifecycle (New → Reviewed → Archived) is
-// the state of the message itself — separate from the related opportunity's
+// One inbox conversation. The Inbox lifecycle (New → Reply recorded → Archived)
+// is the state of the message itself — separate from the related opportunity's
 // New → In Progress → Resolved lifecycle.
-export default function ConversationCard({ convo, isLive, onReview, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy }) {
+export default function ConversationCard({ convo, isLive, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy }) {
   const showActions = isLive;
+  const showDraft = isLive && convo.analysis_status === "Attention" && !!convo.draft_response;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 md:p-5">
@@ -44,14 +47,17 @@ export default function ConversationCard({ convo, isLive, onReview, onArchive, o
             <p className="text-xs text-muted-foreground">{convo.customer_email}</p>
           )}
           <h3 className="text-sm font-medium text-foreground mt-2">{convo.subject}</h3>
-          {isLive && convo.category && (
+          {isLive && convo.analysis_status && convo.analysis_status !== "Not analyzed" && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              {categoryLabel(convo.category)}
+              {convo.analysis_status === "Opportunity" ? "Revenue opportunity" : convo.analysis_status}
+              {convo.category ? ` · ${categoryLabel(convo.category)}` : ""}
               {convo.intent ? ` · ${convo.intent}` : ""}
             </p>
           )}
           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
-          {isLive && convo.draft_response && convo.analysis_status === "Attention" && (
+          {isLive && <ConversationOriginal convo={convo} />}
+          {showDraft && <DraftProvenance convo={convo} />}
+          {showDraft && (
             <AttentionReply
               convo={convo}
               onSaveDraft={onSaveReplyDraft}
@@ -70,11 +76,6 @@ export default function ConversationCard({ convo, isLive, onReview, onArchive, o
 
           {showActions && (
             <div className="flex items-center gap-2 mt-3 flex-wrap">
-              {convo.status === "New" && (
-                <Button variant="outline" size="sm" onClick={() => onReview && onReview(convo)}>
-                  <Check className="w-3.5 h-3.5 mr-1.5" /> Mark reviewed
-                </Button>
-              )}
               {convo.status !== "Archived" && (
                 <Button
                   variant="ghost"
@@ -85,7 +86,7 @@ export default function ConversationCard({ convo, isLive, onReview, onArchive, o
                   <Archive className="w-3.5 h-3.5 mr-1.5" /> Archive
                 </Button>
               )}
-              {(convo.status === "Reviewed" || convo.status === "Archived") && (
+              {["Reply recorded", "Reviewed", "Archived"].includes(convo.status) && (
                 <Button
                   variant="ghost"
                   size="sm"

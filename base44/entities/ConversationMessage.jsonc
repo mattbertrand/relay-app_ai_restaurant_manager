@@ -11,6 +11,10 @@
     "gmail_message_id": {
       "type": "string"
     },
+    "gmail_rfc_id": {
+      "type": "string",
+      "description": "The message's RFC Message-ID header, used to match replies that carry this message in In-Reply-To or References."
+    },
     "sender_name": {
       "type": "string"
     },

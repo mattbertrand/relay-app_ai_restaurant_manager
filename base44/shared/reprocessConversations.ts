@@ -95,6 +95,10 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       ["New", "Needs Attention"].includes(linkedOpp.status) &&
       linkedOpp.draft_status === "Draft";
     const classification = analysis.classification || "routine";
+    // A manager-edited or already-recorded reply draft is manager-controlled
+    // content: re-analysis may update the classification and provenance, but
+    // never overwrites the manager's draft.
+    const managerDraft = convo.draft_edited || convo.reply_status === "Reply recorded";
 
     if (classification === "opportunity") {
       // A follow-up about a matter already tracked: link it, don't duplicate it.
@@ -124,7 +128,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         });
         await base44.entities.Conversation.update(convo.id, {
           opportunity_id: targetOpp.id,
-          ...conversationUpdatesFor("opportunity", analysis),
+          ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
           status: inboxStatus(convo),
         });
         summary.followupsLinked++;
@@ -182,7 +186,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
 
       await base44.entities.Conversation.update(convo.id, {
         ...(oppId ? { opportunity_id: oppId } : {}),
-        ...conversationUpdatesFor("opportunity", analysis),
+        ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
         status: inboxStatus(convo),
       });
       await base44.entities.Activity.create({
@@ -201,7 +205,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         await base44.entities.Conversation.update(convo.id, { opportunity_id: "" });
         summary.opportunitiesRemoved++;
       }
-      const outcome = conversationUpdatesFor(classification, analysis);
+      const outcome = conversationUpdatesFor(classification, analysis, { preserveManagerDraft: managerDraft });
       await base44.entities.Conversation.update(convo.id, {
         ...outcome,
         status: inboxStatus(convo),

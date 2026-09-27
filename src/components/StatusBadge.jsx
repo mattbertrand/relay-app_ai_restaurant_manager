@@ -16,6 +16,7 @@ const STATUS_STYLES = {
   "Opportunity": "bg-emerald-50 text-emerald-700 border-emerald-200",
   "Reviewed": "bg-stone-100 text-stone-500 border-stone-200",
   "Archived": "bg-stone-100 text-stone-400 border-stone-200",
+  "Reply recorded": "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
 export default function StatusBadge({ status, className }) {

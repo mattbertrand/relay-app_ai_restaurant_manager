@@ -96,15 +96,28 @@ export function conversationOutcomeFor(classification) {
 
 // Full conversation updates from an analysis, including what the email
 // represents (category) and the sender's intent.
-export function conversationUpdatesFor(classification, analysis = {}) {
+export function conversationUpdatesFor(classification, analysis = {}, options = {}) {
   const updates = { ...conversationOutcomeFor(classification) };
   if (analysis.category) updates.category = analysis.category;
   if (analysis.intent) updates.intent = analysis.intent;
+  // Lightweight provenance: why Relay classified the message this way and
+  // which verified restaurant facts it used (or that the profile lacks them).
+  if (analysis.why_flagged) updates.why_flagged = analysis.why_flagged;
+  if (analysis.knowledge_used) updates.knowledge_used = analysis.knowledge_used;
+  if (options.preserveManagerDraft) {
+    // The manager edited (or already recorded) this draft — it is
+    // manager-controlled content and is never silently overwritten.
+    return updates;
+  }
   // Attention messages carry Relay's suggested reply — with a filled-in
   // restaurant profile it often fully answers the question (e.g. verified
   // Sunday hours). Opportunity drafts live on the Opportunity itself, and
   // routine/spam have none; re-classification clears any stale draft.
+  // relay_draft keeps Relay's own generated version so the manager's edit is
+  // always distinguishable from the generated one.
   updates.draft_response = classification === "attention" ? analysis.draft_response || "" : "";
+  updates.relay_draft = updates.draft_response;
+  updates.draft_edited = false;
   return updates;
 }
 
@@ -165,6 +178,7 @@ CLASSIFICATION (choose exactly one)
   * business/partnership inquiries
 - attention: real customer intent worth a manager's glance, but NOT a revenue opportunity. These stay visible in the Inbox but never become Opportunities:
   * simple informational questions a real customer asked — e.g. "Hi, are you open this Sunday?" is a legitimate customer inquiry (recognize the intent; if the profile contains Sunday hours you may draft the answer with them)
+  * questions with typos, informal wording, or unusual phrasing — judge the sender's intent, never their spelling: "What are your oping hours on Tuesday?" is an operating-hours question, not a test or junk mail
   * menu, dietary, or allergen questions
   * questions about loyalty programs or gift cards
   * asking for information about private dining rather than requesting to book
@@ -194,6 +208,7 @@ HOW TO DECIDE
    - Customer asks "Can I reserve a table for 18 people?" and the profile states a maximum standard party size of 10 → this is still a Reservation Opportunity; in why_flagged explain that the customer requests a party of 18 while the restaurant profile states a maximum standard party size of 10. If the profile describes a large-party process, use it in the draft; if it does not, do NOT invent what the restaurant will do instead — ask the customer to contact the restaurant directly or say the team will follow up.
    - Customer asks "We're looking for a private dinner for 45 people" and the profile says private events are available up to 60 → strong private event opportunity.
    - Customer asks "Are you open this Sunday?" and the profile contains Sunday hours → classification attention, category general_customer_inquiry, intent "Operating Hours", and a draft that answers with the verified hours. If the profile does NOT contain Sunday hours, still classify it attention/general_customer_inquiry, but never invent hours — draft something like "Let me confirm our Sunday hours for you."
+   - Customer asks "Can we come at 10 AM on Sunday?" and the profile lists Sunday hours of 12:00 PM–9:00 PM → the request conflicts with the verified hours. Say so in knowledge_used and why_flagged, and draft a response that states the verified Sunday hours instead of implying 10 AM works. When the profile configures an alternative (a large-party or private-event process), point to it; when it does not, do not invent one.
 3. Job applications and their follow-ups (resume re-sent, "just following up on my application") are the SAME administrative matter: classification routine, category job_application, and is_followup true with followup_of naming the matter (e.g. "Server position application"). Never create a customer opportunity for employment messages.
 4. is_followup means this message continues a matter that already exists (an open opportunity, or a non-opportunity matter like a job application from the same sender). Two emails from the same person are NOT automatically related — a genuinely new, unrelated request is not a follow-up.
 5. confidence describes your confidence in the CLASSIFICATION itself: High when the intent is unmistakable, Medium when fairly clear, Low when genuinely uncertain.
@@ -203,7 +218,7 @@ HOW TO DECIDE
 9. why_flagged: 1-2 factual sentences combining what the customer asked for, why it matters, and — when one applies — the verified restaurant fact it relates to (e.g. "The restaurant profile states a maximum standard party size of 10."). Never mention AI, models, algorithms, or technology.
 10. knowledge_used: the verified facts from the profile that apply to this message, or a plain statement that the profile does not contain the needed information. Never list facts you inferred or invented.
 11. recommended_action: one specific action tied to the actual message. Empty string when classification is routine or spam.
-12. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT INFORMATION — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). Empty string when classification is routine or spam.
+12. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT INFORMATION — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Empty string when classification is routine or spam.
 13. priority: high for customer_service, reservation_issue, time-sensitive requests, and large or high-value opportunities; medium for clear opportunities with specifics; low otherwise.
 
 Return JSON only.`;

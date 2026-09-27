@@ -11,7 +11,7 @@ import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { isUserFacingActivity } from "@/lib/activityLabels";
-import { TrendingUp, Bell, DollarSign, CheckCircle2, Target, ArrowRight, Activity as ActivityIcon, Clock, Mail, Inbox as InboxIcon } from "lucide-react";
+import { TrendingUp, Bell, DollarSign, CheckCircle2, Target, ArrowRight, Activity as ActivityIcon, Clock, Mail, Inbox as InboxIcon, Undo2, Archive } from "lucide-react";
 
 const ACTIVITY_ICONS = {
   opportunity_identified: Target,
@@ -27,6 +27,8 @@ const ACTIVITY_ICONS = {
   followup_linked: Bell,
   status_update: Clock,
   reply_recorded: Mail,
+  moved_to_new: Undo2,
+  archived: Archive,
 };
 
 export default function Today() {

@@ -297,27 +297,34 @@ export default function GmailIntegrationCard() {
         {testResults && !testResults.error && (
           <div className="mt-3 space-y-1.5">
             {testResults.results.map((r) => (
-              <div key={r.scenario} className="flex items-start justify-between gap-3 text-xs">
-                <span className="text-foreground flex items-center gap-1.5 min-w-0">
-                  {r.pass ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                  ) : (
-                    <XCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                  )}
-                  <span className="truncate">
-                    {r.scenario}
-                    {(r.actualClassification || r.actualCategory) && (
-                      <span className="text-muted-foreground">
-                        {" — "}
-                        {[r.actualClassification, r.actualCategory && r.actualCategory.replace(/_/g, " ")]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
+              <div key={r.scenario} className="text-xs">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-foreground flex items-center gap-1.5 min-w-0">
+                    {r.pass ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                     )}
+                    <span className="truncate">
+                      {r.scenario}
+                      {(r.actualClassification || r.actualCategory) && (
+                        <span className="text-muted-foreground">
+                          {" — "}
+                          {[r.actualClassification, r.actualCategory && r.actualCategory.replace(/_/g, " ")]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      )}
+                    </span>
                   </span>
-                </span>
-                {r.hasValueEstimate && r.valueConfidence && (
-                  <span className="text-muted-foreground whitespace-nowrap">{r.valueConfidence} confidence</span>
+                  {r.hasValueEstimate && r.valueConfidence && (
+                    <span className="text-muted-foreground whitespace-nowrap">{r.valueConfidence} confidence</span>
+                  )}
+                </div>
+                {r.draft && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5 pl-6 line-clamp-1" title={r.draft}>
+                    Draft: “{r.draft}”
+                  </p>
                 )}
               </div>
             ))}

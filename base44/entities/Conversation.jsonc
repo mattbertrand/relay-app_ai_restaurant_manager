@@ -19,7 +19,7 @@
     },
     "status": {
       "type": "string",
-      "description": "Inbox lifecycle of the message itself: New, Reviewed, or Archived. Separate from the underlying opportunity's status."
+      "description": "Inbox lifecycle of the message itself: New, Reply recorded, or Archived. Separate from the underlying opportunity's lifecycle (New \u2192 In Progress \u2192 Resolved)."
     },
     "source": {
       "type": "string"
@@ -59,7 +59,24 @@
     },
     "draft_response": {
       "type": "string",
-      "description": "For attention messages: Relay's suggested reply, often a full answer grounded in the restaurant's verified knowledge. Empty for opportunities (their draft lives on the Opportunity) and for routine/spam."
+      "description": "The current reply draft for this message. Manager-controlled once edited \u2014 never silently overwritten by a newly generated draft."
+    },
+    "relay_draft": {
+      "type": "string",
+      "description": "Relay's own last generated draft, kept separate from draft_response so a manager's edits are always distinguishable from the generated version."
+    },
+    "draft_edited": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once the manager has edited the suggested reply. The draft is then manager-controlled content and is not silently regenerated."
+    },
+    "why_flagged": {
+      "type": "string",
+      "description": "Why Relay classified this message the way it did \u2014 why it matters and any conflict with verified restaurant facts."
+    },
+    "knowledge_used": {
+      "type": "string",
+      "description": "Which verified Restaurant Knowledge facts applied to this message, or a plain statement that the profile does not contain the needed information."
     },
     "reply_status": {
       "type": "string",
@@ -68,7 +85,7 @@
         "Reply recorded"
       ],
       "default": "Not replied",
-      "description": "Whether the manager has recorded a reply for this Attention message. Recording a reply in Relay does not send an email to the customer."
+      "description": "Whether the manager has recorded a reply for this message. Recording a reply in Relay does not send an email to the customer."
     },
     "replied_at": {
       "type": "string",

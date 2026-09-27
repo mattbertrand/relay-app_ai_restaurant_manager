@@ -9,9 +9,11 @@ import CorrectionDialog from "@/components/CorrectionDialog";
 import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Inbox message lifecycle — what happened with this email. Separate from the
-// opportunity lifecycle (New → In Progress → Resolved) on the Opportunities page.
-const FILTERS = ["All", "New", "Reviewed", "Archived"];
+// Inbox message lifecycle — what happened with this email: New (needs
+// attention), Reply recorded (responded in Relay), or Archived (out of the
+// active inbox, never deleted). Separate from the opportunity lifecycle
+// (New → In Progress → Resolved) on the Opportunities page.
+const FILTERS = ["All", "New", "Reply recorded", "Archived"];
 const SOURCES = [
   { label: "All", value: "all" },
   { label: "Demo data", value: "demo" },
@@ -73,40 +75,57 @@ export default function Inbox() {
     }
   }, [loadData, runSync]);
 
-  // Handling an email ends its inbox lifecycle so ordinary messages don't
-  // stay "New" forever.
-  const markReviewed = useCallback(async (convo) => {
-    try {
-      await base44.entities.Conversation.update(convo.id, { status: "Reviewed" });
-      loadData();
-    } catch (err) {
-      console.error(err);
-    }
-  }, [loadData]);
-
+  // Archive removes the message from the active inbox but never deletes it —
+  // the conversation, draft, recorded response, and history all remain, and a
+  // new customer reply brings it back to New.
   const archiveConversation = useCallback(async (convo) => {
     try {
       await base44.entities.Conversation.update(convo.id, { status: "Archived" });
+      await base44.entities.Activity.create({
+        restaurant_id: convo.restaurant_id,
+        type: "archived",
+        description: `Archived "${convo.subject}" from ${convo.customer_name}`,
+        is_demo: !!convo.is_demo,
+      });
       loadData();
     } catch (err) {
       console.error(err);
     }
   }, [loadData]);
 
-  // Undo a mistaken review/archive — only the inbox lifecycle changes; the
-  // analysis classification and any linked opportunity stay untouched.
+  // Undo a mistaken archive or reply — the message returns to New with its
+  // draft, response history, classification, and linked opportunity intact.
   const moveToNew = useCallback(async (convo) => {
     try {
       await base44.entities.Conversation.update(convo.id, { status: "New" });
+      await base44.entities.Activity.create({
+        restaurant_id: convo.restaurant_id,
+        type: "moved_to_new",
+        description: `Moved "${convo.subject}" back to New`,
+        is_demo: !!convo.is_demo,
+      });
       loadData();
     } catch (err) {
       console.error(err);
     }
   }, [loadData]);
 
-  // Save an edited suggested reply without recording it yet.
+  // Save an edited suggested reply without recording it yet. Once the manager
+  // saves changes, the draft is manager-controlled content — later re-analysis
+  // never silently overwrites it.
   const saveReplyDraft = useCallback(async (convo, text) => {
-    await base44.entities.Conversation.update(convo.id, { draft_response: text });
+    await base44.entities.Conversation.update(convo.id, {
+      draft_response: text,
+      draft_edited: text !== (convo.relay_draft || ""),
+    });
+    if (text !== (convo.draft_response || "")) {
+      await base44.entities.Activity.create({
+        restaurant_id: convo.restaurant_id,
+        type: "draft_edited",
+        description: `Response draft edited for ${convo.customer_name} — "${convo.subject}"`,
+        is_demo: !!convo.is_demo,
+      });
+    }
     loadData();
   }, [loadData]);
 
@@ -117,9 +136,10 @@ export default function Inbox() {
     try {
       await base44.entities.Conversation.update(convo.id, {
         draft_response: text,
+        draft_edited: text !== (convo.relay_draft || ""),
         reply_status: "Reply recorded",
         replied_at: new Date().toISOString(),
-        status: "Reviewed",
+        status: "Reply recorded",
       });
       await base44.entities.Activity.create({
         restaurant_id: convo.restaurant_id,
@@ -268,7 +288,6 @@ export default function Inbox() {
                 <ConversationCard
                   convo={convo}
                   isLive={isLive(convo)}
-                  onReview={markReviewed}
                   onArchive={archiveConversation}
                   onCorrect={setCorrecting}
                   onSaveReplyDraft={saveReplyDraft}
