@@ -118,9 +118,29 @@ export async function mergeConversations(base44, { restaurantId, fromConvo, toCo
       fromMsgs.map((m) => ({ id: m.id, conversation_id: toConvo.id }))
     );
   }
+  // The follow-up becomes the latest message of the surviving conversation, so
+  // the conversation carries the follow-up's classification, reasoning, and
+  // draft — the Inbox never shows one message's text with another message's
+  // analysis. A manager-edited draft or recorded reply on the original
+  // conversation is manager-controlled content and is never overwritten.
+  const managerDraft = toConvo.draft_edited || toConvo.reply_status === "Reply recorded";
   await base44.entities.Conversation.update(toConvo.id, {
     message: fromConvo.message || toConvo.message,
     status: "New",
+    analysis_status: fromConvo.analysis_status || toConvo.analysis_status,
+    category: fromConvo.category || toConvo.category,
+    intent: fromConvo.intent || toConvo.intent,
+    why_flagged: fromConvo.why_flagged || toConvo.why_flagged,
+    knowledge_used: fromConvo.knowledge_used || toConvo.knowledge_used,
+    ...(managerDraft
+      ? {}
+      : {
+          draft_response: fromConvo.draft_response || "",
+          relay_draft: fromConvo.relay_draft || "",
+          draft_edited: false,
+          reply_status: "Not replied",
+          replied_at: null,
+        }),
   });
   await base44.entities.Conversation.delete(fromConvo.id);
   await base44.entities.Activity.create({

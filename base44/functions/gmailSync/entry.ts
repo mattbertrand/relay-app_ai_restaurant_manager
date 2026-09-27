@@ -468,8 +468,9 @@ export default async function(req) {
         }
         summary.opportunitiesCreated++;
       } else {
+        const outcome = conversationUpdatesFor(classification, analysis);
         await base44.entities.Conversation.update(item.convo.id, {
-          ...conversationUpdatesFor(classification, analysis),
+          ...outcome,
           ...threadExtras,
         });
         if (classification === 'attention') summary.attentionFlagged++;
@@ -487,7 +488,10 @@ export default async function(req) {
           if (relatedConvo) {
             await mergeConversations(base44, {
               restaurantId,
-              fromConvo: item.convo,
+              // The freshly applied analysis travels with the merged follow-up,
+              // so the surviving conversation shows the follow-up's text AND
+              // its classification/draft — never a mismatched pair.
+              fromConvo: { ...item.convo, ...outcome, ...threadExtras },
               toConvo: relatedConvo,
               messages: existingMsgs,
               description: `Follow-up from ${item.senderName} added to an existing conversation ("${relatedConvo.subject}")`,

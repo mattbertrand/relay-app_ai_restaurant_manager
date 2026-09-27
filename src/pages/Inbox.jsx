@@ -315,7 +315,6 @@ export default function Inbox() {
                             key={c.id}
                             convo={c}
                             isLive={isLive(c)}
-                            onReview={markReviewed}
                             onArchive={archiveConversation}
                             onCorrect={setCorrecting}
                             onSaveReplyDraft={saveReplyDraft}

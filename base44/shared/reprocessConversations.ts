@@ -63,8 +63,16 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
   );
 
   for (const convo of targets.slice(0, MAX_REPROCESS)) {
-    const firstMsg = messages.find((m) => m.conversation_id === convo.id);
-    const body = firstMsg ? firstMsg.body : convo.message;
+    const threadMsgs = messages
+      .filter((m) => m.conversation_id === convo.id)
+      .sort((a, b) => new Date(a.received_at || 0).getTime() - new Date(b.received_at || 0).getTime());
+    // The latest message in the thread decides the analysis — a follow-up's new
+    // intent is what the manager needs to act on now.
+    const latest = threadMsgs[threadMsgs.length - 1];
+    const body = latest ? latest.body : convo.message;
+    // The Inbox preview shows the latest message of the thread — the same one
+    // the analysis addresses — never a stale earlier message.
+    const preview = { message: body.slice(0, 4000) };
 
     let analysis;
     try {
@@ -128,6 +136,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         });
         await base44.entities.Conversation.update(convo.id, {
           opportunity_id: targetOpp.id,
+          ...preview,
           ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
           status: inboxStatus(convo),
         });
@@ -186,6 +195,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
 
       await base44.entities.Conversation.update(convo.id, {
         ...(oppId ? { opportunity_id: oppId } : {}),
+        ...preview,
         ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
         status: inboxStatus(convo),
       });
@@ -207,6 +217,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       }
       const outcome = conversationUpdatesFor(classification, analysis, { preserveManagerDraft: managerDraft });
       await base44.entities.Conversation.update(convo.id, {
+        ...preview,
         ...outcome,
         status: inboxStatus(convo),
       });
@@ -224,7 +235,10 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         if (relatedConvo && !relatedConvo.opportunity_id) {
           await mergeConversations(base44, {
             restaurantId,
-            fromConvo: convo,
+            // The freshly applied analysis travels with the merged follow-up, so
+            // the surviving conversation shows the follow-up's text AND its
+            // classification/draft — never a mismatched pair.
+            fromConvo: { ...convo, ...outcome },
             toConvo: relatedConvo,
             messages,
             description: `Follow-up from ${convo.customer_name} added to an existing conversation ("${relatedConvo.subject}")`,
