@@ -8,16 +8,23 @@ import { Button } from "@/components/ui/button";
 import { Mail, Archive, AlertCircle, Undo2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { categoryLabel } from "@/lib/classification";
+import { cn } from "@/lib/utils";
 
 // One inbox conversation. The Inbox lifecycle (New → Reply recorded → Archived)
 // is the state of the message itself — separate from the related opportunity's
 // New → In Progress → Resolved lifecycle.
-export default function ConversationCard({ convo, isLive, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy }) {
+export default function ConversationCard({ convo, isLive, highlighted, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy }) {
   const showActions = isLive;
   const showDraft = isLive && convo.analysis_status === "Attention" && !!convo.draft_response;
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 md:p-5">
+    <div
+      id={`convo-${convo.id}`}
+      className={cn(
+        "bg-card rounded-xl border border-border p-4 md:p-5",
+        highlighted && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+      )}
+    >
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
           <Mail className="w-5 h-5 text-primary" />
@@ -68,6 +75,7 @@ export default function ConversationCard({ convo, isLive, onArchive, onCorrect, 
           {convo.opportunity_id && (
             <Link
               to={`/opportunities/${convo.opportunity_id}`}
+              state={{ backTo: "inbox" }}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2.5"
             >
               View related opportunity →

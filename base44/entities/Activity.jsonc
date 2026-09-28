@@ -8,6 +8,10 @@
     "opportunity_id": {
       "type": "string"
     },
+    "conversation_id": {
+      "type": "string",
+      "description": "The conversation (email thread) this event belongs to, when the event is about a specific message. Together with opportunity_id this makes every history event unambiguously scoped: an opportunity's history shows only events with its own opportunity_id or the conversation_id of its own linked conversation."
+    },
     "action_id": {
       "type": "string"
     },

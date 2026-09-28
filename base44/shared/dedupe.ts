@@ -1,6 +1,11 @@
-// Shared duplicate detection and follow-up linking used by the Gmail sync and
-// the reprocessing pass. Keeps Relay's "never show the customer twice for the
-// same thing" rules in one place.
+// Shared duplicate detection used by the Gmail sync. Keeps Relay's "never
+// show the customer twice for the same thing" rules in one place.
+//
+// IMPORTANT: a relationship between two emails can ONLY be established by
+// Gmail itself (thread ID / In-Reply-To / References — see threadMatching.ts)
+// or by an exact re-send of identical content (below). The same sender —
+// even with the same subject — is NEVER enough to link, merge, or attach
+// anything: one customer can have many completely separate matters.
 
 export function normalizeText(text) {
   return (text || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -11,7 +16,11 @@ function normalizeBody(text) {
 }
 
 function tokenSet(text) {
-  return new Set(normalizeBody(text).split(" ").filter((t) => t.length > 2));
+  // Keep every token, including single digits ("4", "8") and short words
+  // ("pm", "at") — party sizes and times are exactly what distinguishes two
+  // different reservations from the same sender; stripping short tokens would
+  // make distinct requests look identical.
+  return new Set(normalizeBody(text).split(" ").filter(Boolean));
 }
 
 // Jaccard similarity on body tokens, 0-1
@@ -28,10 +37,11 @@ const DUPLICATE_WINDOW_DAYS = 45;
 const receivedMs = (c) =>
   new Date(c.received_at || c.created_date || 0).getTime();
 
-// Returns the existing conversation this email duplicates, or null.
-// A duplicate = same live Gmail sender with identical body text, or the same
-// subject plus a near-identical body, received within the window. Distinct
-// content from the same sender (e.g. a different question) is NOT a duplicate.
+// Returns the existing conversation this email is an exact re-send of, or
+// null. A duplicate = same live Gmail sender with identical body text, or the
+// same subject plus a near-identical (>= 0.85) body, received within the
+// window. Distinct content from the same sender (e.g. a different reservation)
+// is NOT a duplicate — it is a separate matter.
 export function findDuplicateConversation(convos, { senderEmail, subject, body }) {
   const email = (senderEmail || "").toLowerCase();
   if (!email) return null;
@@ -50,111 +60,12 @@ export function findDuplicateConversation(convos, { senderEmail, subject, body }
   return best;
 }
 
-// Statuses in which an opportunity can receive a linked follow-up. Resolved
-// matters are included on purpose: a new customer message about the same
-// matter reopens them (handled by linkFollowup).
-const LINKABLE_OPP_STATUSES = [
-  "New",
-  "In Progress",
-  "Resolved",
-  "Needs Attention",
-  "Needs Review",
-  "Needs Response",
-];
-
-// Non-demo opportunities already tracked for this sender (minus excludeId)
-export function opportunityTitlesFor(opps, senderEmail, excludeId = "") {
-  const email = (senderEmail || "").toLowerCase();
-  if (!email) return [];
-  return opps
-    .filter((o) => !o.is_demo && o.id !== excludeId)
-    .filter((o) => (o.customer_email || "").toLowerCase() === email)
-    .filter((o) => LINKABLE_OPP_STATUSES.includes(o.status))
-    .map((o) => o.title);
-}
-
-export function findOpportunityByTitle(opps, senderEmail, title, excludeId = "") {
-  const wanted = (title || "").trim();
-  if (!wanted) return null;
-  return (
-    opps.find(
-      (o) =>
-        o.id !== excludeId &&
-        !o.is_demo &&
-        (o.customer_email || "").toLowerCase() === (senderEmail || "").toLowerCase() &&
-        o.title === wanted &&
-        LINKABLE_OPP_STATUSES.includes(o.status)
-    ) || null
-  );
-}
-
-// Finds an existing conversation from the same live sender carrying the same
-// category — used to merge related follow-ups (e.g. a job application
-// follow-up arriving as a brand-new thread) into the conversation they belong
-// to, instead of showing them as unrelated messages. Gmail thread/reply
-// relationships are matched earlier in the sync; this covers the rest.
-export function findRelatedConversation(convos, { senderEmail, category, excludeId = "" }) {
-  const email = (senderEmail || "").toLowerCase();
-  if (!email || !category) return null;
-  return (
-    convos.find(
-      (c) =>
-        c.id !== excludeId &&
-        !c.is_demo &&
-        c.source === "Gmail" &&
-        (c.customer_email || "").toLowerCase() === email &&
-        c.category === category
-    ) || null
-  );
-}
-
-// Moves a follow-up conversation's messages into the conversation it belongs
-// to and removes the duplicate record, so related messages read as one
-// continuous conversation in the Inbox.
-export async function mergeConversations(base44, { restaurantId, fromConvo, toConvo, messages, description }) {
-  const fromMsgs = (messages || []).filter((m) => m.conversation_id === fromConvo.id);
-  if (fromMsgs.length) {
-    await base44.entities.ConversationMessage.bulkUpdate(
-      fromMsgs.map((m) => ({ id: m.id, conversation_id: toConvo.id }))
-    );
-  }
-  // The follow-up becomes the latest message of the surviving conversation, so
-  // the conversation carries the follow-up's classification, reasoning, and
-  // draft — the Inbox never shows one message's text with another message's
-  // analysis. A manager-edited draft or recorded reply on the original
-  // conversation is manager-controlled content and is never overwritten.
-  const managerDraft = toConvo.draft_edited || toConvo.reply_status === "Reply recorded";
-  await base44.entities.Conversation.update(toConvo.id, {
-    message: fromConvo.message || toConvo.message,
-    status: "New",
-    analysis_status: fromConvo.analysis_status || toConvo.analysis_status,
-    analysis_version: fromConvo.analysis_version || toConvo.analysis_version,
-    category: fromConvo.category || toConvo.category,
-    intent: fromConvo.intent || toConvo.intent,
-    why_flagged: fromConvo.why_flagged || toConvo.why_flagged,
-    knowledge_used: fromConvo.knowledge_used || toConvo.knowledge_used,
-    ...(managerDraft
-      ? {}
-      : {
-          draft_response: fromConvo.draft_response || "",
-          relay_draft: fromConvo.relay_draft || "",
-          draft_edited: false,
-          reply_status: "Not replied",
-          replied_at: null,
-        }),
-  });
-  await base44.entities.Conversation.delete(fromConvo.id);
-  await base44.entities.Activity.create({
-    restaurant_id: restaurantId,
-    opportunity_id: toConvo.opportunity_id || "",
-    type: "email_received",
-    description,
-  });
-}
-
-// Links a follow-up message to an existing opportunity: bumps priority when the
-// new message is urgent, reopens a resolved matter, and records the activity.
-export async function linkFollowup(base44, { restaurantId, opportunity, customerName, priority }) {
+// Records a customer follow-up that arrived INSIDE an existing Gmail thread:
+// bumps priority when the new message is urgent, reopens a resolved matter,
+// and logs the activity scoped to that conversation and its opportunity.
+// Only called for messages Gmail itself attached to the thread — never for a
+// separate email from the same sender.
+export async function linkFollowup(base44, { restaurantId, opportunity, customerName, priority, conversationId = "" }) {
   const updates = {};
   let reopened = false;
   if (opportunity.status === "Resolved") {
@@ -170,6 +81,7 @@ export async function linkFollowup(base44, { restaurantId, opportunity, customer
   await base44.entities.Activity.create({
     restaurant_id: restaurantId,
     opportunity_id: opportunity.id,
+    conversation_id: conversationId,
     type: reopened ? "opportunity_reopened" : "followup_linked",
     description: reopened
       ? `New customer message received — Opportunity reopened: ${opportunity.title}`

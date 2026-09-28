@@ -52,8 +52,6 @@ const ANALYSIS_SCHEMA = {
     },
     recommended_action: { type: "string" },
     draft_response: { type: "string" },
-    is_followup: { type: "boolean" },
-    followup_of: { type: "string" },
     has_value_estimate: { type: "boolean" },
     value_confidence: { type: "string", enum: ["High", "Medium", "Low"] },
     value_basis: { type: "string" },
@@ -81,7 +79,7 @@ export function opportunityTypeFor(category) {
 // the analysis prompt change. Every analyzed conversation is stamped with it,
 // so re-analysis runs skip messages already classified by the current rules
 // and only pick up stale ones (idempotent — no repeated activity noise).
-export const ANALYSIS_VERSION = 2;
+export const ANALYSIS_VERSION = 3;
 
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
@@ -96,6 +94,7 @@ export const CLASSIFICATION_LABELS = {
 // opportunity lifecycle ("What is the status of the customer matter?"):
 // a classified message stays New until the manager reviews or handles it.
 export function conversationOutcomeFor(classification) {
+  if (classification === "opportunity") return { analysis_status: "Opportunity", status: "New" };
   if (classification === "attention") return { analysis_status: "Attention", status: "New" };
   if (classification === "administrative") return { analysis_status: "Administrative", status: "New" };
   if (classification === "spam") return { analysis_status: "Spam", status: "New" };
@@ -132,17 +131,6 @@ export function conversationUpdatesFor(classification, analysis = {}, options = 
 }
 
 export async function analyzeEmail(base44, restaurantName, email, options = {}) {
-  const existingTitles = (options.existingOpportunityTitles || []).filter(Boolean);
-  const followupBlock = existingTitles.length
-    ? `
-
-THE CUSTOMER'S EXISTING OPEN OPPORTUNITIES (already tracked by the restaurant — never create a second opportunity for the same matter)
-${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}
-
-If this email is clearly about the same matter as one of the titles above — a follow-up, re-send, duplicate, or continuation of the same request — set is_followup to true and followup_of to the exact matching title. A genuinely different request from the same customer is NOT a follow-up. When in doubt, is_followup is false and followup_of is an empty string.
-IMPORTANT: the tracked list exists ONLY to prevent creating a duplicate opportunity — it never changes the classification. If the email itself expresses genuine purchase intent or a problem (a reservation request, private event inquiry, complaint, and so on), its classification stays opportunity even when the matter is already tracked; the follow-up simply links to the existing opportunity instead of creating a new one. Never demote a genuine opportunity to routine or attention just because the matter is already tracked.`
-    : "";
-
   const knowledgeBlock = options.knowledgeContext
     ? `
 
@@ -163,11 +151,13 @@ ${corrections.join("\n")}`
 
   const prompt = `You are reviewing one incoming email for "${restaurantName}", a restaurant. Relay's promise to the restaurant is: "Never let another customer opportunity fall through the cracks." Your job is to understand the sender's actual intent and decide how much of the manager's attention it deserves. Do not just match keywords — read the message the way a thoughtful manager would.
 
+Each email is analyzed on its own merits. The same customer may have many completely separate matters — judge THIS message by what THIS message says, never by who sent it.
+
 THREE SOURCES OF INFORMATION — keep them strictly separate and never blur them:
 1. VERIFIED RESTAURANT INFORMATION (below): facts the manager entered or confirmed. This is authoritative for restaurant-specific facts. Never contradict it. When you use one of these facts, say so (e.g. "The restaurant profile states a maximum standard party size of 10.").
 2. CUSTOMER-PROVIDED INFORMATION: only what the customer actually wrote (e.g. "The customer is asking about a party of 18.").
 3. YOUR INFERENCE: reasoning that combines the two (e.g. "This appears to be a private-event inquiry."). Never present an inference as a verified restaurant fact, and never invent restaurant facts at all.
-${knowledgeBlock}${correctionsBlock}${followupBlock}
+${knowledgeBlock}${correctionsBlock}
 
 EMAIL
 From: ${email.senderName} <${email.senderEmail}>
@@ -222,17 +212,16 @@ HOW TO DECIDE
    - Customer asks "We're looking for a private dinner for 45 people" and the profile says private events are available up to 60 → strong private event opportunity.
    - Customer asks "Are you open this Sunday?" and the profile contains Sunday hours → classification attention, category general_customer_inquiry, intent "Operating Hours", and a draft that answers with the verified hours. If the profile does NOT contain Sunday hours, still classify it attention/general_customer_inquiry, but never invent hours — draft something like "Let me confirm our Sunday hours for you."
    - Customer asks "Can we come at 10 AM on Sunday?" and the profile lists Sunday hours of 12:00 PM–9:00 PM → the request conflicts with the verified hours. Say so in knowledge_used and why_flagged, and draft a response that states the verified Sunday hours instead of implying 10 AM works. When the profile configures an alternative (a large-party or private-event process), point to it; when it does not, do not invent one.
-3. Job applications and their follow-ups (resume re-sent, "just following up on my application") are the SAME administrative matter: classification administrative, category job_application, and is_followup true with followup_of naming the matter (e.g. "Server position application"). Never create a customer opportunity for employment messages.
-4. is_followup means this message continues a matter that already exists (an open opportunity, or a non-opportunity matter like a job application from the same sender). Two emails from the same person are NOT automatically related — a genuinely new, unrelated request is not a follow-up.
-5. confidence describes your confidence in the CLASSIFICATION itself: High when the intent is unmistakable, Medium when fairly clear, Low when genuinely uncertain.
-6. Value estimate: ONLY for catering, private events, large parties (about 10+ guests), or when the customer states an explicit monetary amount. Assumptions: catering $18-$30 per person; private events and large-party dining $50-$75 per person. If the customer states a spending amount, use it with High confidence. If only a guest count is known, use Medium confidence. Otherwise has_value_estimate is false — never invent a value, and never estimate a value for a standard table reservation, even when the party size is known. value_basis is a short plain-English calculation like "80 guests × $18–$30 per person".
-7. customer_facts: ONLY what the customer actually wrote, in one or two factual sentences. Never include your own assumptions.
-8. relay_assessment: your assessment of why it matters, framed as an assessment ("May represent a significant catering opportunity."), never as something the customer said. Empty string when classification is routine, administrative, or spam.
-9. why_flagged: 1-2 factual sentences combining what the customer asked for, why it matters, and — when one applies — the verified restaurant fact it relates to (e.g. "The restaurant profile states a maximum standard party size of 10."). Never mention AI, models, algorithms, or technology.
-10. knowledge_used: the verified facts from the profile that apply to this message, or a plain statement that the profile does not contain the needed information. Never list facts you inferred or invented.
-11. recommended_action: one specific action tied to the actual message. Empty string when classification is routine or spam.
-12. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT INFORMATION — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. Empty string when classification is routine, administrative, or spam.
-13. priority: high for customer_service, reservation_issue, time-sensitive requests, and large or high-value opportunities; medium for clear opportunities with specifics; low otherwise.
+3. Job applications and their follow-ups (resume re-sent, "just following up on my application") are the same administrative matter: classification administrative, category job_application. Never create a customer opportunity for employment messages.
+4. confidence describes your confidence in the CLASSIFICATION itself: High when the intent is unmistakable, Medium when fairly clear, Low when genuinely uncertain.
+5. Value estimate: ONLY for catering, private events, large parties (about 10+ guests), or when the customer states an explicit monetary amount. Assumptions: catering $18-$30 per person; private events and large-party dining $50-$75 per person. If the customer states a spending amount, use it with High confidence. If only a guest count is known, use Medium confidence. Otherwise has_value_estimate is false — never invent a value, and never estimate a value for a standard table reservation, even when the party size is known. value_basis is a short plain-English calculation like "80 guests × $18–$30 per person".
+6. customer_facts: ONLY what the customer actually wrote, in one or two factual sentences. Never include your own assumptions.
+7. relay_assessment: your assessment of why it matters, framed as an assessment ("May represent a significant catering opportunity."), never as something the customer said. Empty string when classification is routine, administrative, or spam.
+8. why_flagged: 1-2 factual sentences combining what the customer asked for, why it matters, and — when one applies — the verified restaurant fact it relates to (e.g. "The restaurant profile states a maximum standard party size of 10."). Never mention AI, models, algorithms, or technology.
+9. knowledge_used: the verified facts from the profile that apply to this message, or a plain statement that the profile does not contain the needed information. Never list facts you inferred or invented.
+10. recommended_action: one specific action tied to the actual message. Empty string when classification is routine or spam.
+11. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT INFORMATION — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. Empty string when classification is routine, administrative, or spam.
+12. priority: high for customer_service, reservation_issue, time-sensitive requests, and large or high-value opportunities; medium for clear opportunities with specifics; low otherwise.
 
 Return JSON only.`;
 

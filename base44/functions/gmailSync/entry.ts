@@ -8,14 +8,8 @@ import {
   extractTextBody,
 } from "../../shared/gmailApi.ts";
 import { analyzeEmail, opportunityTypeFor, conversationUpdatesFor } from "../../shared/emailAnalysis.ts";
-import {
-  findDuplicateConversation,
-  findOpportunityByTitle,
-  opportunityTitlesFor,
-  linkFollowup,
-  findRelatedConversation,
-  mergeConversations,
-} from "../../shared/dedupe.ts";
+import { findDuplicateConversation, linkFollowup } from "../../shared/dedupe.ts";
+import { matchExistingConversation } from "../../shared/threadMatching.ts";
 import {
   loadKnowledge,
   loadRecentFeedback,
@@ -88,6 +82,8 @@ export default async function(req) {
     existingMsgs.forEach((m) => {
       if (m.gmail_rfc_id) convoIdByRfcId[m.gmail_rfc_id.trim().toLowerCase()] = m.conversation_id;
     });
+    // Live Gmail conversations only — thread relationships are a Gmail concept.
+    const liveConvos = convos.filter((c) => c.source === 'Gmail' && !c.is_demo);
 
     // Re-run the current analysis on live Gmail conversations classified by an
     // earlier version of the classifier (skips importing new mail)
@@ -168,33 +164,36 @@ export default async function(req) {
         });
       }
 
+      // Thread identity comes first and only from Gmail: thread ID, then
+      // In-Reply-To / References. The sender is NEVER a relationship signal —
+      // the same customer may have many completely separate matters.
       let threadConvo = threadConvos[message.threadId] || null;
-      let duplicateConvo = null;
       if (!threadConvo) {
-        // A reply may carry a fresh Gmail thread ID — match it to the message
-        // it answers through the standard In-Reply-To / References headers.
-        const replyToIds = [
-          getHeader(message, 'In-Reply-To'),
-          ...getHeader(message, 'References').split(/\s+/),
-        ]
-          .map((v) => (v || '').trim().toLowerCase())
-          .filter(Boolean);
-        for (const rid of replyToIds) {
-          const convoId = convoIdByRfcId[rid];
-          if (!convoId) continue;
-          const target = convos.find((c) => c.id === convoId);
-          if (target) { threadConvo = target; break; }
+        threadConvo = matchExistingConversation({
+          convos: liveConvos,
+          rfcToConversationId: convoIdByRfcId,
+          threadId: message.threadId,
+          inReplyTo: getHeader(message, 'In-Reply-To'),
+          references: getHeader(message, 'References').split(/\s+/),
+        });
+        if (threadConvo) {
+          threadConvos[message.threadId] = threadConvo;
         }
       }
+      let duplicateConvo = null;
       if (!threadConvo && fromEmail) {
         // Fresh database check so two overlapping syncs can't import the same
-        // email twice, and so identical re-sends merge into the original
+        // thread twice, and so an exact re-send of identical content merges
+        // into the original. Distinct content is a separate matter.
         const senderConvos = await base44.entities.Conversation.filter(
           { restaurant_id: restaurantId, customer_email: from.email },
           null,
           100
         );
-        threadConvo = senderConvos.find((c) => c.gmail_thread_id === message.threadId) || null;
+        threadConvo =
+          senderConvos.find(
+            (c) => c.source === 'Gmail' && !c.is_demo && c.gmail_thread_id === message.threadId
+          ) || null;
         if (threadConvo) {
           threadConvos[message.threadId] = threadConvo;
         } else {
@@ -249,6 +248,7 @@ export default async function(req) {
         await base44.entities.Activity.create({
           restaurant_id: restaurantId,
           opportunity_id: '',
+          conversation_id: convo.id,
           type: 'email_received',
           description: `Email received: ${subject} from ${from.name}`,
         });
@@ -290,6 +290,7 @@ export default async function(req) {
             await base44.entities.Activity.create({
               restaurant_id: restaurantId,
               opportunity_id: threadOpp.id,
+              conversation_id: threadConvo.id,
               type: 'opportunity_reopened',
               description: `New customer message received — Opportunity reopened: ${threadOpp.title}`,
             });
@@ -317,6 +318,7 @@ export default async function(req) {
         await base44.entities.Activity.create({
           restaurant_id: restaurantId,
           opportunity_id: target.opportunity_id || '',
+          conversation_id: target.id,
           type: threadConvo ? 'email_received' : 'email_merged',
           description: threadConvo
             ? `Email received: ${subject} from ${from.name}`
@@ -370,7 +372,6 @@ export default async function(req) {
           subject: item.subject,
           body: item.body,
         }, {
-          existingOpportunityTitles: opportunityTitlesFor(opps, item.senderEmail),
           knowledgeContext,
           corrections,
         });
@@ -386,21 +387,22 @@ export default async function(req) {
 
       const classification = analysis.classification || 'routine';
       if (classification === 'opportunity') {
-        // A follow-up about a matter already tracked: link it, don't duplicate it
-        const relatedOpp = analysis.is_followup
-          ? findOpportunityByTitle(opps, item.senderEmail, analysis.followup_of)
+        // A follow-up that arrived INSIDE an existing Gmail thread continues
+        // that thread's own matter: link it to this conversation's opportunity
+        // (reopening it if resolved). A separate email from the same sender is
+        // a separate matter and gets its own opportunity — never linked by sender.
+        const threadOpp = item.isThreadReply && item.convo.opportunity_id
+          ? opps.find((o) => o.id === item.convo.opportunity_id)
           : null;
-        if (relatedOpp) {
-          // Link the follow-up to the existing opportunity — and reopen it if
-          // the customer came back after the matter was marked resolved
+        if (threadOpp) {
           const reopened = await linkFollowup(base44, {
             restaurantId,
-            opportunity: relatedOpp,
+            opportunity: threadOpp,
             customerName: item.senderName,
             priority: analysis.priority,
+            conversationId: item.convo.id,
           });
           await base44.entities.Conversation.update(item.convo.id, {
-            opportunity_id: relatedOpp.id,
             ...conversationUpdatesFor('opportunity', analysis),
             ...threadExtras,
           });
@@ -455,6 +457,7 @@ export default async function(req) {
         await base44.entities.Activity.create({
           restaurant_id: restaurantId,
           opportunity_id: opp.id,
+          conversation_id: item.convo.id,
           type: 'opportunity_identified',
           description: `Opportunity identified: ${opp.title} from ${item.senderName} (Gmail)`,
         });
@@ -462,6 +465,7 @@ export default async function(req) {
           await base44.entities.Activity.create({
             restaurant_id: restaurantId,
             opportunity_id: opp.id,
+            conversation_id: item.convo.id,
             type: 'draft_prepared',
             description: `Draft response created for ${item.senderName}'s ${oppType.toLowerCase()}`,
           });
@@ -475,30 +479,9 @@ export default async function(req) {
         });
         if (classification === 'attention') summary.attentionFlagged++;
 
-        // A follow-up about a matter that has no opportunity (e.g. a job
-        // application follow-up) joins the original conversation instead of
-        // appearing as an unrelated second message. Thread replies already
-        // live in the right conversation — only brand-new threads are merged.
-        if (analysis.is_followup && !item.isThreadReply) {
-          const relatedConvo = findRelatedConversation(convos, {
-            senderEmail: item.senderEmail,
-            category: analysis.category,
-            excludeId: item.convo.id,
-          });
-          if (relatedConvo) {
-            await mergeConversations(base44, {
-              restaurantId,
-              // The freshly applied analysis travels with the merged follow-up,
-              // so the surviving conversation shows the follow-up's text AND
-              // its classification/draft — never a mismatched pair.
-              fromConvo: { ...item.convo, ...outcome, ...threadExtras },
-              toConvo: relatedConvo,
-              messages: existingMsgs,
-              description: `Follow-up from ${item.senderName} added to an existing conversation ("${relatedConvo.subject}")`,
-            });
-            summary.relatedMerged++;
-          }
-        }
+        // Nothing else to do: a separate email from the same sender (e.g. a
+        // job application follow-up Gmail filed as its own thread) stays its
+        // own conversation — sender similarity is never a relationship.
       }
     }
 

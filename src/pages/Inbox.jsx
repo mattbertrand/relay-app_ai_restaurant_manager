@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
@@ -19,6 +20,9 @@ const SOURCES = [
   { label: "Demo data", value: "demo" },
   { label: "Live Gmail", value: "gmail" },
 ];
+// The Inbox context (tab, source, scroll position) survives navigation, so
+// returning from an opportunity puts the manager back where they were.
+const INBOX_CONTEXT_KEY = "relay-inbox-context";
 
 export default function Inbox() {
   const [conversations, setConversations] = useState(null);
@@ -31,6 +35,11 @@ export default function Inbox() {
   const [correcting, setCorrecting] = useState(null);
   const [replyBusy, setReplyBusy] = useState(false);
   const syncedRef = useRef(false);
+  const location = useLocation();
+  const scrollPosRef = useRef(0);
+  const pendingScrollRef = useRef(null);
+  const focusHandledRef = useRef(false);
+  const focusId = location.state?.focusConversationId;
 
   const loadData = useCallback(async () => {
     try {
@@ -74,6 +83,66 @@ export default function Inbox() {
       runSync(true);
     }
   }, [loadData, runSync]);
+
+  // Restore the previous Inbox context (tab, source, scroll position) on
+  // return — from an opportunity, the sidebar, or anywhere else. A "view
+  // source email" jump focuses the exact message instead of restoring.
+  useEffect(() => {
+    if (location.state?.focusConversationId) {
+      setFilter("All");
+      setSource("all");
+      return;
+    }
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(INBOX_CONTEXT_KEY) || "null");
+      if (saved) {
+        if (saved.filter) setFilter(saved.filter);
+        if (saved.source) setSource(saved.source);
+        pendingScrollRef.current = saved.scrollY || 0;
+      }
+    } catch (e) {
+      /* fresh start */
+    }
+    // Mount-only: restore the saved context once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the scroll position live; the full context is saved on unmount.
+  useEffect(() => {
+    const onScroll = () => {
+      scrollPosRef.current = window.scrollY;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      try {
+        sessionStorage.setItem(
+          INBOX_CONTEXT_KEY,
+          JSON.stringify({ filter, source, scrollY: scrollPosRef.current })
+        );
+      } catch (e) {
+        /* storage unavailable */
+      }
+    };
+  }, [filter, source]);
+
+  // Once the list is rendered: focus the requested message, or restore the
+  // previous scroll position.
+  useEffect(() => {
+    if (!conversations) return;
+    if (focusId && !focusHandledRef.current) {
+      const el = document.getElementById(`convo-${focusId}`);
+      if (el) {
+        focusHandledRef.current = true;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+    if (pendingScrollRef.current) {
+      window.scrollTo({ top: pendingScrollRef.current });
+      pendingScrollRef.current = 0;
+    }
+  }, [conversations, focusId]);
 
   // Archive removes the message from the active inbox but never deletes it —
   // the conversation, draft, recorded response, and history all remain, and a
@@ -288,6 +357,7 @@ export default function Inbox() {
                 <ConversationCard
                   convo={convo}
                   isLive={isLive(convo)}
+                  highlighted={convo.id === focusId}
                   onArchive={archiveConversation}
                   onCorrect={setCorrecting}
                   onSaveReplyDraft={saveReplyDraft}
@@ -306,7 +376,7 @@ export default function Inbox() {
                       ) : (
                         <ChevronDown className="w-3.5 h-3.5" />
                       )}
-                      {similar.length} similar message{similar.length === 1 ? "" : "s"} from this sender
+                      {similar.length} other message{similar.length === 1 ? "" : "s"} from this sender
                     </button>
                     {expandedGroups[convo.id] && (
                       <div className="mt-3 space-y-3 border-l-2 border-border pl-3 md:pl-4">
@@ -315,6 +385,7 @@ export default function Inbox() {
                             key={c.id}
                             convo={c}
                             isLive={isLive(c)}
+                            highlighted={c.id === focusId}
                             onArchive={archiveConversation}
                             onCorrect={setCorrecting}
                             onSaveReplyDraft={saveReplyDraft}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import StatusBadge from "@/components/StatusBadge";
 import PriorityBadge from "@/components/PriorityBadge";
@@ -34,8 +34,10 @@ const DRAFT_STATUS_STYLES = {
 export default function OpportunityDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [opp, setOpp] = useState(null);
   const [activities, setActivities] = useState(null);
+  const [linkedConversations, setLinkedConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -44,17 +46,37 @@ export default function OpportunityDetail() {
   const [dismissOpen, setDismissOpen] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
 
+  // Contextual navigation: opened from the Inbox returns to the Inbox.
+  const fromInbox = location.state?.backTo === "inbox";
+  const sourceConvo = (linkedConversations || [])[0];
+
+  // An opportunity's history is exactly: its own events, plus the events of
+  // the conversation (email thread) that started it. Nothing restaurant-wide.
+  const fetchActivities = useCallback(async (convos) => {
+    const [oppActs, convActs] = await Promise.all([
+      base44.entities.Activity.filter({ opportunity_id: id }, "-created_date", 50),
+      Promise.all(
+        (convos || []).map((c) =>
+          base44.entities.Activity.filter({ conversation_id: c.id }, "-created_date", 50).catch(() => [])
+        )
+      ),
+    ]);
+    const seen = new Set();
+    return [...(oppActs || []), ...convActs.flat()]
+      .filter((a) => !seen.has(a.id) && seen.add(a.id))
+      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+  }, [id]);
+
   const loadData = useCallback(async () => {
     try {
-      const [o, acts] = await Promise.all([
+      const [o, convos] = await Promise.all([
         base44.entities.Opportunity.get(id),
-        // Only events tied to this specific opportunity — never mixed with
-        // activity belonging to other customers or opportunities.
-        base44.entities.Activity.filter({ opportunity_id: id }, "-created_date", 50),
+        base44.entities.Conversation.filter({ opportunity_id: id }, null, 10),
       ]);
       setOpp(o);
       setDraft(o.draft_response || "");
-      setActivities(acts);
+      setLinkedConversations(convos || []);
+      setActivities(await fetchActivities(convos || []));
 
       // Opening a New opportunity counts as the manager reviewing it — the
       // lifecycle moves to In Progress, never to Resolved.
@@ -63,18 +85,19 @@ export default function OpportunityDetail() {
         await base44.entities.Activity.create({
           restaurant_id: o.restaurant_id,
           opportunity_id: id,
+          conversation_id: (convos || [])[0]?.id || "",
           type: "opportunity_reviewed",
           description: `Opportunity reviewed: ${o.title}`,
         });
         setOpp({ ...o, status: "In Progress" });
-        setActivities(await base44.entities.Activity.filter({ opportunity_id: id }, "-created_date", 50));
+        setActivities(await fetchActivities(convos || []));
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, fetchActivities]);
 
   useEffect(() => {
     loadData();
@@ -214,12 +237,21 @@ export default function OpportunityDetail() {
 
   return (
     <div className="p-5 md:p-8 max-w-3xl mx-auto pb-20 md:pb-8">
-      <Link
-        to="/opportunities"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Opportunities
-      </Link>
+      {fromInbox ? (
+        <button
+          onClick={() => navigate("/inbox")}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Inbox
+        </button>
+      ) : (
+        <Link
+          to="/opportunities"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Opportunities
+        </Link>
+      )}
 
       {/* Header */}
       <div className="mb-6">
@@ -300,12 +332,24 @@ export default function OpportunityDetail() {
         </div>
       </div>
 
-      {/* Original message */}
-      {opp.original_message && (
+      {/* Original message + a direct path back to the source email */}
+      {(opp.original_message || sourceConvo) && (
         <div className="bg-card rounded-xl border border-border p-5 mb-6">
-          <h2 className="text-sm font-semibold text-foreground mb-3">Original Message</h2>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="text-sm font-semibold text-foreground">Original Message</h2>
+            {sourceConvo && (
+              <button
+                onClick={() =>
+                  navigate("/inbox", { state: { focusConversationId: sourceConvo.id } })
+                }
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline whitespace-nowrap"
+              >
+                <Mail className="w-3.5 h-3.5" /> View source email in Inbox
+              </button>
+            )}
+          </div>
           <div className="bg-secondary/40 rounded-lg p-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-            {opp.original_message}
+            {opp.original_message || sourceConvo.message}
           </div>
         </div>
       )}

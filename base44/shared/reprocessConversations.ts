@@ -5,13 +5,6 @@ import {
   ANALYSIS_VERSION,
 } from "./emailAnalysis.ts";
 import {
-  findOpportunityByTitle,
-  opportunityTitlesFor,
-  linkFollowup,
-  findRelatedConversation,
-  mergeConversations,
-} from "./dedupe.ts";
-import {
   loadKnowledge,
   loadRecentFeedback,
   formatKnowledgeForPrompt,
@@ -40,7 +33,8 @@ async function findOpportunity(base44, id) {
 // Re-runs the current analysis on live Gmail conversations that were classified
 // by an earlier version of the classifier, and reconciles their opportunities:
 // auto-created, untouched drafts are updated or removed; anything the manager
-// has already reviewed, edited, or approved is left alone.
+// has already reviewed, edited, or approved is left alone. Each conversation is
+// analyzed strictly on its own merits — nothing is linked by sender.
 export async function reprocessConversations({ base44, restaurantId, restaurantName, convos, messages }) {
   const opps = await base44.entities.Opportunity.filter({ restaurant_id: restaurantId }, null, 500);
   const [knowledgeRecord, feedback] = await Promise.all([
@@ -63,13 +57,10 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
   };
 
   // Historical cleanup: early sync runs imported the same Gmail message as two
-  // conversation records (same gmail_message_id). Each copy then sees the
-  // other's linked opportunity when analyzed, so the classifier reads it as an
-  // already-tracked duplicate and demotes one copy to Routine — the same email
-  // shows as Opportunity one run and Routine the next. Collapse the copies into
-  // the stronger record (manager-controlled first, then linked-opportunity,
-  // then oldest); manager-controlled copies are never discarded, and an
-  // untouched draft opportunity on the duplicate is removed with it.
+  // conversation records (same gmail_message_id). Collapse the copies into the
+  // stronger record (manager-controlled first, then linked-opportunity, then
+  // oldest); manager-controlled copies are never discarded, and an untouched
+  // draft opportunity on the duplicate is removed with it.
   const removedDuplicateIds = new Set();
   const byMsgId = new Map();
   for (const c of convos) {
@@ -118,11 +109,22 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     }
   }
 
-  const targets = convos.filter(
+  // An opportunity belongs to exactly ONE conversation. If several
+  // conversations reference the same opportunity, that link is a stale
+  // same-sender mis-association — treat it as no link at all so each
+  // conversation gets (and keeps) its own.
+  const liveConvos = convos.filter(
+    (c) => c.source === "Gmail" && !c.is_demo && !removedDuplicateIds.has(c.id)
+  );
+  const linkCounts = {};
+  for (const c of liveConvos) {
+    if (c.opportunity_id) linkCounts[c.opportunity_id] = (linkCounts[c.opportunity_id] || 0) + 1;
+  }
+  const isSharedLink = (convo) =>
+    !!(convo.opportunity_id && linkCounts[convo.opportunity_id] > 1);
+
+  const targets = liveConvos.filter(
     (c) =>
-      c.source === "Gmail" &&
-      !c.is_demo &&
-      !removedDuplicateIds.has(c.id) &&
       REPROCESSABLE.includes(c.analysis_status) &&
       // Only messages the current classifier rules haven't seen yet — a
       // re-run never re-analyzes (or re-logs) what's already up to date.
@@ -149,7 +151,6 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         subject: convo.subject,
         body,
       }, {
-        existingOpportunityTitles: opportunityTitlesFor(opps, convo.customer_email, convo.opportunity_id),
         knowledgeContext,
         corrections,
       });
@@ -164,7 +165,10 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     }
     summary.reprocessed++;
 
-    const linkedOpp = convo.opportunity_id ? await findOpportunity(base44, convo.opportunity_id) : null;
+    // A shared (mis-associated) link counts as no link — the conversation
+    // will get its own opportunity below.
+    const sharedLink = isSharedLink(convo);
+    const linkedOpp = !sharedLink && convo.opportunity_id ? await findOpportunity(base44, convo.opportunity_id) : null;
     const untouchedDraft =
       linkedOpp &&
       ["New", "Needs Attention"].includes(linkedOpp.status) &&
@@ -176,41 +180,6 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     const managerDraft = convo.draft_edited || convo.reply_status === "Reply recorded";
 
     if (classification === "opportunity") {
-      // A follow-up about a matter already tracked: link it, don't duplicate it.
-      // The linked opportunity itself may be the resolved matter the customer
-      // is following up on — reopening it keeps the thread continuous.
-      const resolvedSelf =
-        linkedOpp && linkedOpp.status === "Resolved" && analysis.followup_of === linkedOpp.title
-          ? linkedOpp
-          : null;
-      const relatedOpp =
-        analysis.is_followup && (!linkedOpp || untouchedDraft)
-          ? findOpportunityByTitle(opps, convo.customer_email, analysis.followup_of, convo.opportunity_id)
-          : null;
-      const targetOpp = resolvedSelf || relatedOpp;
-      if (targetOpp) {
-        if (linkedOpp && untouchedDraft && linkedOpp.id !== targetOpp.id) {
-          await base44.entities.Action.deleteMany({ opportunity_id: linkedOpp.id });
-          await base44.entities.Activity.deleteMany({ opportunity_id: linkedOpp.id });
-          await base44.entities.Opportunity.delete(linkedOpp.id);
-          summary.opportunitiesRemoved++;
-        }
-        const reopened = await linkFollowup(base44, {
-          restaurantId,
-          opportunity: targetOpp,
-          customerName: convo.customer_name,
-          priority: analysis.priority,
-        });
-        await base44.entities.Conversation.update(convo.id, {
-          opportunity_id: targetOpp.id,
-          ...preview,
-          ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
-          status: inboxStatus(convo),
-        });
-        summary.followupsLinked++;
-        if (reopened) summary.reopened++;
-        continue;
-      }
       const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || "Business inquiry";
       const originalMessage = `Subject: ${convo.subject}\n\n${body}`;
       const fields = {
@@ -261,69 +230,49 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       }
 
       await base44.entities.Conversation.update(convo.id, {
-        ...(oppId ? { opportunity_id: oppId } : {}),
+        opportunity_id: oppId || "",
         ...preview,
         ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
         status: inboxStatus(convo),
       });
       // Only a real change earns a history entry — re-running the analysis
-      // must not pile up "re-reviewed" events on every pass.
+      // must not pile up "re-reviewed" events on every pass. The event is
+      // scoped to this conversation and its own opportunity.
       if (convo.analysis_status !== "Opportunity") {
         await base44.entities.Activity.create({
           restaurant_id: restaurantId,
-          opportunity_id: oppId,
+          opportunity_id: oppId || "",
+          conversation_id: convo.id,
           type: "classification_changed",
           description: `Classification changed from ${convo.analysis_status || "Not analyzed"} to Opportunity — ${analysis.title || convo.subject}`,
         });
       }
     } else {
       // No longer an opportunity: remove the auto-created draft opportunity if
-      // nobody has touched it, and recategorize the conversation.
+      // nobody has touched it (and drop a stale shared link), then recategorize.
+      const dropLink = !!(linkedOpp && untouchedDraft) || sharedLink;
       if (linkedOpp && untouchedDraft) {
         await base44.entities.Action.deleteMany({ opportunity_id: linkedOpp.id });
         await base44.entities.Activity.deleteMany({ opportunity_id: linkedOpp.id });
         await base44.entities.Opportunity.delete(linkedOpp.id);
-        await base44.entities.Conversation.update(convo.id, { opportunity_id: "" });
         summary.opportunitiesRemoved++;
       }
       const outcome = conversationUpdatesFor(classification, analysis, { preserveManagerDraft: managerDraft });
       await base44.entities.Conversation.update(convo.id, {
+        ...(dropLink ? { opportunity_id: "" } : {}),
         ...preview,
         ...outcome,
         status: inboxStatus(convo),
       });
       if (classification === "attention") summary.attentionFlagged++;
 
-      // A follow-up about a matter that has no opportunity (e.g. a job
-      // application follow-up) joins the original conversation instead of
-      // appearing as an unrelated second message.
-      if (analysis.is_followup) {
-        const relatedConvo = findRelatedConversation(convos, {
-          senderEmail: convo.customer_email,
-          category: analysis.category,
-          excludeId: convo.id,
-        });
-        if (relatedConvo && !relatedConvo.opportunity_id) {
-          await mergeConversations(base44, {
-            restaurantId,
-            // The freshly applied analysis travels with the merged follow-up, so
-            // the surviving conversation shows the follow-up's text AND its
-            // classification/draft — never a mismatched pair.
-            fromConvo: { ...convo, ...outcome },
-            toConvo: relatedConvo,
-            messages,
-            description: `Follow-up from ${convo.customer_name} added to an existing conversation ("${relatedConvo.subject}")`,
-          });
-          summary.relatedMerged = (summary.relatedMerged || 0) + 1;
-          continue;
-        }
-      }
       // Only a real change earns a history entry — repeated re-analysis with
       // the same result stays silent.
       if (convo.analysis_status && convo.analysis_status !== outcome.analysis_status) {
         await base44.entities.Activity.create({
           restaurant_id: restaurantId,
           opportunity_id: linkedOpp && !untouchedDraft ? linkedOpp.id : "",
+          conversation_id: convo.id,
           type: "classification_changed",
           description: `Classification changed from ${convo.analysis_status} to ${outcome.analysis_status}${analysis.intent ? ` — ${analysis.intent}` : ""}: "${convo.subject}"`,
         });
