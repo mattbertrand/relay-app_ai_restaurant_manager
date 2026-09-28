@@ -1,7 +1,6 @@
 import {
   analyzeEmail,
   opportunityTypeFor,
-  CLASSIFICATION_LABELS,
   conversationUpdatesFor,
 } from "./emailAnalysis.ts";
 import {
@@ -19,7 +18,7 @@ import {
 } from "./restaurantKnowledge.ts";
 
 const MAX_REPROCESS = 20;
-const REPROCESSABLE = ["Opportunity", "No opportunity", "Attention", "Routine", "Spam", "Needs review"];
+const REPROCESSABLE = ["Opportunity", "No opportunity", "Attention", "Routine", "Administrative", "Spam", "Needs review"];
 
 // Reprocessing re-classifies a message, but it never resets what the manager
 // has already done with it: reviewed/archived inbox state is preserved.
@@ -199,12 +198,16 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
         status: inboxStatus(convo),
       });
-      await base44.entities.Activity.create({
-        restaurant_id: restaurantId,
-        opportunity_id: oppId,
-        type: "message_reviewed",
-        description: `Message re-reviewed and confirmed as an opportunity: ${analysis.title || convo.subject}`,
-      });
+      // Only a real change earns a history entry — re-running the analysis
+      // must not pile up "re-reviewed" events on every pass.
+      if (convo.analysis_status !== "Opportunity") {
+        await base44.entities.Activity.create({
+          restaurant_id: restaurantId,
+          opportunity_id: oppId,
+          type: "classification_changed",
+          description: `Classification changed from ${convo.analysis_status || "Not analyzed"} to Opportunity — ${analysis.title || convo.subject}`,
+        });
+      }
     } else {
       // No longer an opportunity: remove the auto-created draft opportunity if
       // nobody has touched it, and recategorize the conversation.
@@ -247,12 +250,16 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
           continue;
         }
       }
-      await base44.entities.Activity.create({
-        restaurant_id: restaurantId,
-        opportunity_id: linkedOpp && !untouchedDraft ? linkedOpp.id : "",
-        type: "message_reviewed",
-        description: `Message from ${convo.customer_name} re-reviewed and classified as ${CLASSIFICATION_LABELS[classification] || classification}: "${convo.subject}"`,
-      });
+      // Only a real change earns a history entry — repeated re-analysis with
+      // the same result stays silent.
+      if (convo.analysis_status && convo.analysis_status !== outcome.analysis_status) {
+        await base44.entities.Activity.create({
+          restaurant_id: restaurantId,
+          opportunity_id: linkedOpp && !untouchedDraft ? linkedOpp.id : "",
+          type: "classification_changed",
+          description: `Classification changed from ${convo.analysis_status} to ${outcome.analysis_status}${analysis.intent ? ` — ${analysis.intent}` : ""}: "${convo.subject}"`,
+        });
+      }
     }
   }
 

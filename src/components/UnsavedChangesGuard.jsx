@@ -11,35 +11,54 @@ import { getUnsavedChanges, clearUnsavedChanges, onUnsavedChangesChange } from "
 // in-app links and the browser Back button — and asks what to do: stay, leave
 // without saving, or save first. A single instance lives in the app layout, so
 // the dialog never duplicates, and it only appears when there are real unsaved
-// edits (the page's isDirty check).
+// edits (the page's isDirty check). Navigating with nothing changed never
+// shows it.
 export default function UnsavedChangesGuard() {
   const navigate = useNavigate();
   const [pendingHref, setPendingHref] = useState(null); // link-click navigation
   const [backPending, setBackPending] = useState(false); // Back-button navigation
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
-  const sentinelRef = useRef(false);
+  const sentinelRef = useRef(false); // extra history entry guarding Back
+  const dialogOpenRef = useRef(false);
 
   const open = !!pendingHref || backPending;
+  dialogOpenRef.current = open;
 
   // While there are unsaved edits, keep an extra history entry on the same
   // URL so a Back press lands on this page (not away from it) and the dialog
-  // can ask what to do.
+  // can ask what to do. When the page becomes clean again (saved, or edits
+  // reverted), the extra entry is removed so Back works normally.
   useEffect(
     () =>
-      onUnsavedChangesChange((reg) => {
-        if (reg && reg.isDirty() && !sentinelRef.current && window.history) {
-          try {
-            window.history.pushState(
-              { ...(window.history.state || {}), relayUnsavedGuard: true },
-              "",
-              window.location.href
-            );
-            sentinelRef.current = true;
-          } catch (e) {
-            /* history unsupported — in-app links are still guarded */
+      onUnsavedChangesChange(() => {
+        // Re-check after the current render settles — pages re-register on
+        // each keystroke, and only the final state matters.
+        setTimeout(() => {
+          const reg = getUnsavedChanges();
+          const dirty = !!(reg && reg.isDirty && reg.isDirty());
+          if (dirty) {
+            if (!sentinelRef.current && window.history) {
+              try {
+                window.history.pushState(
+                  { ...(window.history.state || {}), relayUnsavedGuard: true },
+                  "",
+                  window.location.href
+                );
+                sentinelRef.current = true;
+              } catch (e) {
+                /* history unsupported — in-app links are still guarded */
+              }
+            }
+          } else if (sentinelRef.current && !dialogOpenRef.current) {
+            sentinelRef.current = false;
+            try {
+              window.history.back();
+            } catch (e) {
+              /* best effort — worst case Back needs one extra press */
+            }
           }
-        }
+        }, 0);
       }),
     []
   );
@@ -122,6 +141,9 @@ export default function UnsavedChangesGuard() {
     try {
       await reg.save();
       setSaving(false);
+      // The deliberate navigation consumes the extra history entry — never
+      // let the cleanup auto-pop history underneath it.
+      sentinelRef.current = false;
       clearUnsavedChanges();
       if (backPending) {
         // Past the extra history entry and the page entry before it.
@@ -140,6 +162,7 @@ export default function UnsavedChangesGuard() {
   };
 
   const handleLeaveWithoutSaving = () => {
+    sentinelRef.current = false;
     if (backPending) {
       clearUnsavedChanges();
       setBackPending(false);
@@ -147,6 +170,7 @@ export default function UnsavedChangesGuard() {
     } else {
       const href = pendingHref;
       setPendingHref(null);
+      clearUnsavedChanges();
       navigate(href);
     }
   };
@@ -163,17 +187,17 @@ export default function UnsavedChangesGuard() {
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="sm:space-x-2 gap-2">
+          <Button variant="outline" onClick={close} disabled={saving}>
+            Stay
+          </Button>
           <Button variant="ghost" onClick={handleLeaveWithoutSaving} disabled={saving}>
             Leave without saving
-          </Button>
-          <Button variant="outline" onClick={close} disabled={saving}>
-            Stay on this page
           </Button>
           <Button onClick={handleSaveAndLeave} disabled={saving}>
             {saving ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
             ) : (
-              <><Save className="w-4 h-4 mr-2" /> Save and leave</>
+              <><Save className="w-4 h-4 mr-2" /> Save changes</>
             )}
           </Button>
         </DialogFooter>

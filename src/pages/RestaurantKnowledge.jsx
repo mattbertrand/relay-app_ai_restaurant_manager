@@ -9,14 +9,25 @@ import ReservationsEditor from "@/components/knowledge/ReservationsEditor";
 import EventsCateringEditor from "@/components/knowledge/EventsCateringEditor";
 import OfferingsEditor from "@/components/knowledge/OfferingsEditor";
 import MenuPoliciesEditor from "@/components/knowledge/MenuPoliciesEditor";
-import { TextField } from "@/components/knowledge/Fields";
+import { TextField, SelectField } from "@/components/knowledge/Fields";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import {
   Save, Loader2, Check, MapPin, Clock, CalendarCheck, PartyPopper,
   UtensilsCrossed, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
+
+const TIMEZONES = [
+  { value: "America/Los_Angeles", label: "Pacific Time (Los Angeles)" },
+  { value: "America/Denver", label: "Mountain Time (Denver)" },
+  { value: "America/Phoenix", label: "Arizona Time (Phoenix)" },
+  { value: "America/Chicago", label: "Central Time (Chicago)" },
+  { value: "America/New_York", label: "Eastern Time (New York)" },
+  { value: "America/Anchorage", label: "Alaska Time (Anchorage)" },
+  { value: "Pacific/Honolulu", label: "Hawaii Time (Honolulu)" },
+];
 
 const SECTIONS = [
   { id: "basics", label: "Basics", icon: MapPin, title: "Basic restaurant information", description: "Address and contact details Relay can use to answer customer questions." },
@@ -29,6 +40,7 @@ const SECTIONS = [
 
 export default function RestaurantKnowledge() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [knowledge, setKnowledge] = useState(null);
   const [recordId, setRecordId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,7 +86,11 @@ export default function RestaurantKnowledge() {
       return true;
     } catch (err) {
       console.error(err);
-      alert("Something went wrong. Please try again.");
+      toast({
+        title: "Couldn't save your changes",
+        description: "Please try again — your edits are still here.",
+        variant: "destructive",
+      });
       return false;
     } finally {
       setSaving(false);
@@ -95,7 +111,7 @@ export default function RestaurantKnowledge() {
       },
     });
     return () => clearUnsavedChanges();
-  });
+  }, [dirty, knowledge, baseline]);
 
   if (loading || !knowledge) {
     return (
@@ -169,6 +185,12 @@ export default function RestaurantKnowledge() {
               value={knowledge.contact_email}
               onChange={setField("contact_email")}
               type="email"
+            />
+            <SelectField
+              label="Timezone (used for displayed timestamps)"
+              value={knowledge.timezone}
+              onChange={setField("timezone")}
+              options={TIMEZONES}
             />
           </div>
         </KnowledgeSection>

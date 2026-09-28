@@ -102,6 +102,8 @@ export function emptyKnowledge() {
       other: "",
     },
     other_info: "",
+    // The restaurant's local timezone (IANA name) — displayed timestamps use it.
+    timezone: "America/Los_Angeles",
   };
 }
 

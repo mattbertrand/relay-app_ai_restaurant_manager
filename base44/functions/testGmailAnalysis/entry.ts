@@ -116,10 +116,18 @@ const SCENARIOS = [
     expectValue: false,
   },
   {
+    name: 'Unknown information (valet parking)',
+    subject: 'Valet Parking',
+    body: 'Hi, do you have valet parking?',
+    expectedClassification: 'attention',
+    expectedCategory: 'general_customer_inquiry',
+    expectValue: false,
+  },
+  {
     name: 'Job application',
     subject: 'Bartender Position',
     body: 'Hello, I am an experienced bartender interested in joining your team. I have attached my resume and would love to discuss any open positions.',
-    expectedClassification: 'routine',
+    expectedClassification: 'administrative',
     expectedCategory: 'job_application',
     expectValue: false,
   },
@@ -127,7 +135,7 @@ const SCENARIOS = [
     name: 'Job application follow-up',
     subject: 'Following up on my application',
     body: 'Hello, I am following up on the server position application I sent last week. I remain very interested in the opportunity.',
-    expectedClassification: 'routine',
+    expectedClassification: 'administrative',
     expectedCategory: 'job_application',
     expectValue: false,
   },
@@ -211,7 +219,13 @@ export default async function(req) {
       }
     }
 
-    return Response.json({ restaurantName, results });
+    // Compact summary first so long draft outputs can't hide the outcome.
+    const failed = results.filter((r) => !r.pass).map((r) => r.scenario);
+    return Response.json({
+      restaurantName,
+      summary: { total: results.length, passed: results.length - failed.length, failed },
+      results,
+    });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

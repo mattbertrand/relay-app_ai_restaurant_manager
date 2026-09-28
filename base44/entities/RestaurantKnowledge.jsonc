@@ -26,6 +26,10 @@
     "contact_email": {
       "type": "string"
     },
+    "timezone": {
+      "type": "string",
+      "description": "The restaurant's local timezone as an IANA name (e.g. 'America/Los_Angeles'). All user-facing timestamps are displayed in this timezone; stored timestamps remain UTC."
+    },
     "hours": {
       "type": "object",
       "additionalProperties": true,

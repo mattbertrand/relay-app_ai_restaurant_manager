@@ -13,18 +13,32 @@ export function formatValueRange(min, max) {
   return formatCurrency(min || max);
 }
 
+// The restaurant's configured local timezone (IANA name). All displayed
+// timestamps — activity history, received times, opportunity dates — are
+// shown in this timezone; stored timestamps stay UTC. Unset falls back to
+// the viewer's own browser timezone.
+let activeTimezone = null;
+
+export function setActiveTimezone(tz) {
+  activeTimezone = typeof tz === "string" && tz ? tz : null;
+}
+
 export function formatDate(dateStr) {
   if (!dateStr) return "—";
   const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric", timeZone: activeTimezone || undefined,
+  });
 }
 
 export function formatDateTime(dateStr) {
   if (!dateStr) return "—";
   const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+  return (
+    date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: activeTimezone || undefined }) +
     " at " +
-    date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: activeTimezone || undefined })
+  );
 }
 
 export function timeAgo(dateStr) {

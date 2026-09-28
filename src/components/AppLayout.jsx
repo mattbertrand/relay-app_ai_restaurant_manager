@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
-import { getRestaurantId, getInitials } from "@/lib/format";
+import { getRestaurantId, getInitials, setActiveTimezone } from "@/lib/format";
+import { base44 } from "@/api/base44Client";
 import { Sun, Target, Inbox, CheckSquare, Settings, LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,21 @@ export default function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Load the restaurant's configured timezone once — every displayed
+  // timestamp (activity history, received times, opportunity dates) uses it.
+  useEffect(() => {
+    if (!user) return;
+    const rid = getRestaurantId(user);
+    if (!rid) return;
+    let cancelled = false;
+    base44.entities.RestaurantKnowledge.filter({ restaurant_id: rid }, null, 1)
+      .then((records) => {
+        if (!cancelled) setActiveTimezone(records[0]?.timezone || "America/Los_Angeles");
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
 
   const handleLogout = () => {
     logout(false);

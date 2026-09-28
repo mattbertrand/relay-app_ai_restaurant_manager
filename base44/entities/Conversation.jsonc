@@ -45,6 +45,7 @@
         "Opportunity",
         "Attention",
         "Routine",
+        "Administrative",
         "Spam",
         "Needs review"
       ]

@@ -4,7 +4,7 @@
 const ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
-    classification: { type: "string", enum: ["opportunity", "attention", "routine", "spam"] },
+    classification: { type: "string", enum: ["opportunity", "attention", "administrative", "routine", "spam"] },
     confidence: { type: "string", enum: ["High", "Medium", "Low"] },
     category: {
       type: "string",
@@ -80,6 +80,7 @@ export function opportunityTypeFor(category) {
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
   attention: "Attention",
+  administrative: "Administrative",
   routine: "Routine",
   spam: "Spam",
 };
@@ -90,6 +91,7 @@ export const CLASSIFICATION_LABELS = {
 // a classified message stays New until the manager reviews or handles it.
 export function conversationOutcomeFor(classification) {
   if (classification === "attention") return { analysis_status: "Attention", status: "New" };
+  if (classification === "administrative") return { analysis_status: "Administrative", status: "New" };
   if (classification === "spam") return { analysis_status: "Spam", status: "New" };
   return { analysis_status: "Routine", status: "New" };
 }
@@ -184,10 +186,12 @@ CLASSIFICATION (choose exactly one)
   * asking for information about private dining rather than requesting to book
   * special requests
   * thank-you notes worth seeing (but a bare thank-you with no question is routine)
-- routine: ordinary low-priority or administrative messages that do not require manager intervention:
+- administrative: real but non-customer correspondence that does not represent a customer or revenue matter:
   * job applications — a job application, resume/CV, application follow-up, interview availability, candidate follow-up, or employment inquiry is ALWAYS Administrative → Job Application, never a customer opportunity, even when the person sounds eager
+  * employment inquiries
   * vendor and general administrative messages
   * billing/account administrative mail
+- routine: ordinary low-priority messages that do not require manager intervention:
   * automated notifications (confirmations, receipts, calendar invites)
   * no-actionable-intent messages ("Test")
   * a bare thank-you with no question
@@ -196,7 +200,7 @@ CLASSIFICATION (choose exactly one)
 CATEGORY (choose exactly one)
 - Customer / revenue (when classification is opportunity): catering, private_event, reservation, reservation_issue, customer_service, high_value_business, partnership
 - general_customer_inquiry: a real customer asked a question (classification attention, or opportunity only in the rare case a question itself shows purchase intent worth tracking)
-- Administrative (classification routine): job_application, vendor, billing_administrative, general_administrative
+- Administrative (classification administrative): job_application, vendor, billing_administrative, general_administrative
 - Routine (classification routine): general_information, automated_notification, non_actionable
 - Spam (classification spam): spam, newsletter, irrelevant_promotional
 
@@ -209,16 +213,16 @@ HOW TO DECIDE
    - Customer asks "We're looking for a private dinner for 45 people" and the profile says private events are available up to 60 → strong private event opportunity.
    - Customer asks "Are you open this Sunday?" and the profile contains Sunday hours → classification attention, category general_customer_inquiry, intent "Operating Hours", and a draft that answers with the verified hours. If the profile does NOT contain Sunday hours, still classify it attention/general_customer_inquiry, but never invent hours — draft something like "Let me confirm our Sunday hours for you."
    - Customer asks "Can we come at 10 AM on Sunday?" and the profile lists Sunday hours of 12:00 PM–9:00 PM → the request conflicts with the verified hours. Say so in knowledge_used and why_flagged, and draft a response that states the verified Sunday hours instead of implying 10 AM works. When the profile configures an alternative (a large-party or private-event process), point to it; when it does not, do not invent one.
-3. Job applications and their follow-ups (resume re-sent, "just following up on my application") are the SAME administrative matter: classification routine, category job_application, and is_followup true with followup_of naming the matter (e.g. "Server position application"). Never create a customer opportunity for employment messages.
+3. Job applications and their follow-ups (resume re-sent, "just following up on my application") are the SAME administrative matter: classification administrative, category job_application, and is_followup true with followup_of naming the matter (e.g. "Server position application"). Never create a customer opportunity for employment messages.
 4. is_followup means this message continues a matter that already exists (an open opportunity, or a non-opportunity matter like a job application from the same sender). Two emails from the same person are NOT automatically related — a genuinely new, unrelated request is not a follow-up.
 5. confidence describes your confidence in the CLASSIFICATION itself: High when the intent is unmistakable, Medium when fairly clear, Low when genuinely uncertain.
 6. Value estimate: ONLY for catering, private events, large parties (about 10+ guests), or when the customer states an explicit monetary amount. Assumptions: catering $18-$30 per person; private events and large-party dining $50-$75 per person. If the customer states a spending amount, use it with High confidence. If only a guest count is known, use Medium confidence. Otherwise has_value_estimate is false — never invent a value, and never estimate a value for a standard table reservation, even when the party size is known. value_basis is a short plain-English calculation like "80 guests × $18–$30 per person".
 7. customer_facts: ONLY what the customer actually wrote, in one or two factual sentences. Never include your own assumptions.
-8. relay_assessment: your assessment of why it matters, framed as an assessment ("May represent a significant catering opportunity."), never as something the customer said. Empty string when classification is routine or spam.
+8. relay_assessment: your assessment of why it matters, framed as an assessment ("May represent a significant catering opportunity."), never as something the customer said. Empty string when classification is routine, administrative, or spam.
 9. why_flagged: 1-2 factual sentences combining what the customer asked for, why it matters, and — when one applies — the verified restaurant fact it relates to (e.g. "The restaurant profile states a maximum standard party size of 10."). Never mention AI, models, algorithms, or technology.
 10. knowledge_used: the verified facts from the profile that apply to this message, or a plain statement that the profile does not contain the needed information. Never list facts you inferred or invented.
 11. recommended_action: one specific action tied to the actual message. Empty string when classification is routine or spam.
-12. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT INFORMATION — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Empty string when classification is routine or spam.
+12. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT INFORMATION — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. Empty string when classification is routine, administrative, or spam.
 13. priority: high for customer_service, reservation_issue, time-sensitive requests, and large or high-value opportunities; medium for clear opportunities with specifics; low otherwise.
 
 Return JSON only.`;

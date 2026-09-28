@@ -25,6 +25,7 @@ const ACTIVITY_ICONS = {
   opportunity_resolved: CheckCircle2,
   opportunity_reopened: Bell,
   followup_linked: Bell,
+  classification_changed: ArrowRight,
   status_update: Clock,
   reply_recorded: Mail,
   moved_to_new: Undo2,

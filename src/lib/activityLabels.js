@@ -12,6 +12,7 @@ export const ACTIVITY_LABELS = {
   opportunity_reopened: "Opportunity reopened",
   opportunity_dismissed: "Opportunity dismissed",
   followup_linked: "Customer follow-up received",
+  classification_changed: "Classification changed",
   message_reviewed: "Message re-reviewed",
   reply_recorded: "Reply recorded",
   moved_to_new: "Moved back to New",
@@ -19,7 +20,7 @@ export const ACTIVITY_LABELS = {
 };
 
 // Internal bookkeeping that never belongs in the manager-facing history.
-export const HIDDEN_ACTIVITY_TYPES = ["email_merged", "status_update", "sync"];
+export const HIDDEN_ACTIVITY_TYPES = ["email_merged", "status_update", "sync", "message_reviewed"];
 
 export function isUserFacingActivity(activity) {
   return activity && !HIDDEN_ACTIVITY_TYPES.includes(activity.type);
