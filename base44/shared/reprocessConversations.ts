@@ -2,6 +2,7 @@ import {
   analyzeEmail,
   opportunityTypeFor,
   conversationUpdatesFor,
+  ANALYSIS_VERSION,
 } from "./emailAnalysis.ts";
 import {
   findOpportunityByTitle,
@@ -17,6 +18,9 @@ import {
   formatCorrectionsForPrompt,
 } from "./restaurantKnowledge.ts";
 
+// Safety cap per run — Gmail re-analysis makes one model call per message, so
+// a run stays bounded in time and credit use. Remaining messages are picked up
+// by the next run (the Inbox sync re-analyzes new arrivals automatically).
 const MAX_REPROCESS = 20;
 const REPROCESSABLE = ["Opportunity", "No opportunity", "Attention", "Routine", "Administrative", "Spam", "Needs review"];
 
@@ -55,10 +59,74 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     opportunitiesRemoved: 0,
     attentionFlagged: 0,
     needsReview: 0,
+    duplicateImportsMerged: 0,
   };
 
+  // Historical cleanup: early sync runs imported the same Gmail message as two
+  // conversation records (same gmail_message_id). Each copy then sees the
+  // other's linked opportunity when analyzed, so the classifier reads it as an
+  // already-tracked duplicate and demotes one copy to Routine — the same email
+  // shows as Opportunity one run and Routine the next. Collapse the copies into
+  // the stronger record (manager-controlled first, then linked-opportunity,
+  // then oldest); manager-controlled copies are never discarded, and an
+  // untouched draft opportunity on the duplicate is removed with it.
+  const removedDuplicateIds = new Set();
+  const byMsgId = new Map();
+  for (const c of convos) {
+    if (c.source !== "Gmail" || c.is_demo || !c.gmail_message_id) continue;
+    const list = byMsgId.get(c.gmail_message_id);
+    if (list) list.push(c);
+    else byMsgId.set(c.gmail_message_id, [c]);
+  }
+  for (const group of byMsgId.values()) {
+    if (group.length < 2) continue;
+    const managerControlled = (c) =>
+      c.draft_edited || c.reply_status === "Reply recorded" || c.status === "Reply recorded";
+    const keepers = group.filter(managerControlled);
+    const pool = keepers.length ? keepers : group;
+    const keeper = [...pool].sort(
+      (a, b) =>
+        (b.opportunity_id ? 1 : 0) - (a.opportunity_id ? 1 : 0) ||
+        new Date(a.created_date).getTime() - new Date(b.created_date).getTime()
+    )[0];
+    for (const dupe of group) {
+      if (dupe.id === keeper.id || managerControlled(dupe)) continue;
+      try {
+        await base44.entities.ConversationMessage.updateMany(
+          { restaurant_id: restaurantId, conversation_id: dupe.id },
+          { $set: { conversation_id: keeper.id } }
+        );
+      } catch (e) {
+        /* no messages to move */
+      }
+      if (dupe.opportunity_id && dupe.opportunity_id !== keeper.opportunity_id) {
+        try {
+          const dupOpp = await base44.entities.Opportunity.get(dupe.opportunity_id);
+          if (["New", "Needs Attention"].includes(dupOpp.status) && dupOpp.draft_status === "Draft") {
+            await base44.entities.Action.deleteMany({ opportunity_id: dupOpp.id });
+            await base44.entities.Activity.deleteMany({ opportunity_id: dupOpp.id });
+            await base44.entities.Opportunity.delete(dupOpp.id);
+            summary.opportunitiesRemoved++;
+          }
+        } catch (e) {
+          /* already removed */
+        }
+      }
+      await base44.entities.Conversation.delete(dupe.id);
+      removedDuplicateIds.add(dupe.id);
+      summary.duplicateImportsMerged++;
+    }
+  }
+
   const targets = convos.filter(
-    (c) => c.source === "Gmail" && !c.is_demo && REPROCESSABLE.includes(c.analysis_status)
+    (c) =>
+      c.source === "Gmail" &&
+      !c.is_demo &&
+      !removedDuplicateIds.has(c.id) &&
+      REPROCESSABLE.includes(c.analysis_status) &&
+      // Only messages the current classifier rules haven't seen yet — a
+      // re-run never re-analyzes (or re-logs) what's already up to date.
+      c.analysis_version !== ANALYSIS_VERSION
   );
 
   for (const convo of targets.slice(0, MAX_REPROCESS)) {

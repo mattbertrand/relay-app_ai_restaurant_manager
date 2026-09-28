@@ -77,6 +77,12 @@ export function opportunityTypeFor(category) {
   return TYPE_BY_CATEGORY[category] || null;
 }
 
+// The classifier rules version — bump whenever the classification rules or
+// the analysis prompt change. Every analyzed conversation is stamped with it,
+// so re-analysis runs skip messages already classified by the current rules
+// and only pick up stale ones (idempotent — no repeated activity noise).
+export const ANALYSIS_VERSION = 2;
+
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
   attention: "Attention",
@@ -100,6 +106,8 @@ export function conversationOutcomeFor(classification) {
 // represents (category) and the sender's intent.
 export function conversationUpdatesFor(classification, analysis = {}, options = {}) {
   const updates = { ...conversationOutcomeFor(classification) };
+  // Stamp the rules version so re-analysis can skip up-to-date messages.
+  updates.analysis_version = ANALYSIS_VERSION;
   if (analysis.category) updates.category = analysis.category;
   if (analysis.intent) updates.intent = analysis.intent;
   // Lightweight provenance: why Relay classified the message this way and
@@ -131,7 +139,8 @@ export async function analyzeEmail(base44, restaurantName, email, options = {}) 
 THE CUSTOMER'S EXISTING OPEN OPPORTUNITIES (already tracked by the restaurant — never create a second opportunity for the same matter)
 ${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 
-If this email is clearly about the same matter as one of the titles above — a follow-up, re-send, duplicate, or continuation of the same request — set is_followup to true and followup_of to the exact matching title. A genuinely different request from the same customer is NOT a follow-up. When in doubt, is_followup is false and followup_of is an empty string.`
+If this email is clearly about the same matter as one of the titles above — a follow-up, re-send, duplicate, or continuation of the same request — set is_followup to true and followup_of to the exact matching title. A genuinely different request from the same customer is NOT a follow-up. When in doubt, is_followup is false and followup_of is an empty string.
+IMPORTANT: the tracked list exists ONLY to prevent creating a duplicate opportunity — it never changes the classification. If the email itself expresses genuine purchase intent or a problem (a reservation request, private event inquiry, complaint, and so on), its classification stays opportunity even when the matter is already tracked; the follow-up simply links to the existing opportunity instead of creating a new one. Never demote a genuine opportunity to routine or attention just because the matter is already tracked.`
     : "";
 
   const knowledgeBlock = options.knowledgeContext

@@ -128,6 +128,7 @@ export async function mergeConversations(base44, { restaurantId, fromConvo, toCo
     message: fromConvo.message || toConvo.message,
     status: "New",
     analysis_status: fromConvo.analysis_status || toConvo.analysis_status,
+    analysis_version: fromConvo.analysis_version || toConvo.analysis_version,
     category: fromConvo.category || toConvo.category,
     intent: fromConvo.intent || toConvo.intent,
     why_flagged: fromConvo.why_flagged || toConvo.why_flagged,

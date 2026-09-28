@@ -54,6 +54,10 @@
       "type": "string",
       "description": "What the email represents, e.g. reservation, job_application, general_customer_inquiry."
     },
+    "analysis_version": {
+      "type": "integer",
+      "description": "The classifier rules version this message was last analyzed with \u2014 lets re-analysis skip conversations already classified by the current rules."
+    },
     "intent": {
       "type": "string",
       "description": "Short phrase naming the customer's or sender's intent, e.g. 'Operating Hours', 'Reservation Request'."
