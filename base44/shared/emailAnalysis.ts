@@ -1,6 +1,8 @@
 // Shared email analysis used by the Gmail sync, the reprocessing pass, and the test scenarios.
 // Keeps Relay's classification rules in one place.
 
+import { detectDateIssue } from "./dateChecks.ts";
+
 const ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
@@ -37,6 +39,12 @@ const ANALYSIS_SCHEMA = {
       type: "string",
       description:
         "Short phrase naming what the sender actually wants, e.g. 'Operating Hours', 'Reservation Request', 'Catering Request', 'Job Application'. Empty only for spam.",
+    },
+    date_issue: {
+      type: "string",
+      enum: ["none", "impossible_date", "weekday_mismatch", "ambiguous_date", "outside_hours", "closed"],
+      description:
+        "Set only when the message states a date, weekday, or time that conflicts: impossible_date (the date does not exist), weekday_mismatch (valid date, wrong weekday), ambiguous_date (month/year unclear), outside_hours (conflicts with verified operating hours), closed (the restaurant is closed that day). Use 'none' for ordinary requests.",
     },
     opportunity_type: { type: "string" },
     title: { type: "string" },
@@ -79,7 +87,7 @@ export function opportunityTypeFor(category) {
 // the analysis prompt change. Every analyzed conversation is stamped with it,
 // so re-analysis runs skip messages already classified by the current rules
 // and only pick up stale ones (idempotent — no repeated activity noise).
-export const ANALYSIS_VERSION = 3;
+export const ANALYSIS_VERSION = 4;
 
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
@@ -105,8 +113,11 @@ export function conversationOutcomeFor(classification) {
 // represents (category) and the sender's intent.
 export function conversationUpdatesFor(classification, analysis = {}, options = {}) {
   const updates = { ...conversationOutcomeFor(classification) };
-  // Stamp the rules version so re-analysis can skip up-to-date messages.
+  // Stamp the rules version so re-analysis can skip up-to-date messages, and
+  // when this analysis was generated — later "Re-analyze" actions use it to
+  // detect that Restaurant Knowledge changed since the analysis.
   updates.analysis_version = ANALYSIS_VERSION;
+  updates.last_analyzed_at = new Date().toISOString();
   if (analysis.category) updates.category = analysis.category;
   if (analysis.intent) updates.intent = analysis.intent;
   // Lightweight provenance: why Relay classified the message this way and
@@ -142,6 +153,33 @@ VERIFIED RESTAURANT INFORMATION
 (None provided yet. The restaurant's profile has not been filled in. You must NOT invent any restaurant facts — hours, party-size limits, policies, menu items, catering availability, private-event capacity, none of it. If the customer asks something that needs a restaurant-specific fact, say in knowledge_used that the profile does not contain that information, and draft a response that does not state the fact — e.g. "Let me confirm our Sunday hours for you.")`;
 
   const corrections = options.corrections || [];
+  // The restaurant's local date anchors relative dates and weekday checks —
+  // all date reasoning uses the restaurant's configured timezone.
+  const tz = options.timezone || "";
+  const todayInRestaurant = tz
+    ? new Date().toLocaleDateString("en-CA", { timeZone: tz })
+    : new Date().toISOString().slice(0, 10);
+  // Impossible dates and weekday mismatches are computed deterministically in
+  // code — the model is told the verified finding and must reflect it, but
+  // never resolves the ambiguity itself.
+  const dateCheck = detectDateIssue(email.body, todayInRestaurant);
+  const detectedBlock =
+    dateCheck.issue !== "none"
+      ? `
+
+DETECTED DATE CONFLICT (computed by Relay from the calendar — authoritative; the sender's intended date is UNKNOWN):
+- ${dateCheck.detail}
+Set date_issue to "${dateCheck.issue}", report this conflict before anything else in why_flagged, and make the clarification request the first thing in draft_response (e.g. "Just to confirm, September 30 falls on a Wednesday rather than Tuesday — could you confirm which date you were looking for?"). Never invent or silently correct the sender's intended date.`
+      : "";
+  const dateBlock = `
+
+DATE AND WEEKDAY CHECKS (the restaurant's local timezone is ${tz || "not configured"}; today's date there is ${todayInRestaurant}). When the message states a specific date, day of the week, month, or time, check it against the calendar and the verified operating hours before responding — but never overcomplicate a normal request:
+- Impossible date (e.g. "September 31" — September has 30 days): state plainly that the date does not exist. Never invent or substitute a date; ask which date the sender meant.
+- Valid date whose stated weekday is wrong (e.g. "Tuesday the 30th" when the 30th falls on a Wednesday): do NOT decide which part the sender intended — not the weekday, not the date, not the month/year. Name the mismatch exactly ("Just to confirm, September 30 falls on a Wednesday rather than Tuesday — could you confirm which date you were looking for?") and ask for clarification. Never silently correct either part.
+- Ambiguous date ("the 30th" with no month, or a month with no year): if the intended month or year cannot be determined from the message, do not invent it — ask for the full date.
+- Date or time outside the verified operating hours, or a day the restaurant is closed: name the conflict against the verified hours and reference the verified hours instead — without claiming availability or implying a reservation is possible.
+- A valid date with a matching weekday: proceed normally, with no date commentary.
+This check runs FIRST, before anything else: if the message names a date or weekday that does not match the calendar, date_issue MUST be set (never "none") and the draft MUST ask the sender to confirm which date they meant — even when the message also raises other matters (party size, event type, budget, hours). Report the date mismatch before anything else in why_flagged and in the draft. When one of these applies, set date_issue accordingly and include the clarification request in draft_response; otherwise date_issue is "none".`;
   const correctionsBlock = corrections.length
     ? `
 
@@ -157,7 +195,7 @@ THREE SOURCES OF INFORMATION — keep them strictly separate and never blur them
 1. VERIFIED RESTAURANT INFORMATION (below): facts the manager entered or confirmed. This is authoritative for restaurant-specific facts. Never contradict it. When you use one of these facts, say so (e.g. "The restaurant profile states a maximum standard party size of 10.").
 2. CUSTOMER-PROVIDED INFORMATION: only what the customer actually wrote (e.g. "The customer is asking about a party of 18.").
 3. YOUR INFERENCE: reasoning that combines the two (e.g. "This appears to be a private-event inquiry."). Never present an inference as a verified restaurant fact, and never invent restaurant facts at all.
-${knowledgeBlock}${correctionsBlock}
+${knowledgeBlock}${correctionsBlock}${dateBlock}${detectedBlock}
 
 EMAIL
 From: ${email.senderName} <${email.senderEmail}>
@@ -229,5 +267,10 @@ Return JSON only.`;
     prompt,
     response_json_schema: ANALYSIS_SCHEMA,
   });
+  // The deterministic calendar check is authoritative for impossible dates
+  // and weekday mismatches — enforce the field even if the model missed it.
+  if (dateCheck.issue !== "none" && result && result.date_issue !== dateCheck.issue) {
+    result.date_issue = dateCheck.issue;
+  }
   return result;
 }

@@ -130,6 +130,7 @@ const SCENARIOS = [
     expectedClassification: 'administrative',
     expectedCategory: 'job_application',
     expectValue: false,
+    expectedNoDraft: true,
   },
   {
     name: 'Job application follow-up',
@@ -138,6 +139,7 @@ const SCENARIOS = [
     expectedClassification: 'administrative',
     expectedCategory: 'job_application',
     expectValue: false,
+    expectedNoDraft: true,
   },
   {
     name: 'No actionable intent',
@@ -153,6 +155,25 @@ const SCENARIOS = [
     body: 'Check out our latest deals and updates! Click here to read more. Unsubscribe anytime.',
     expectedClassification: 'spam',
     expectValue: false,
+  },
+  {
+    name: 'Impossible date: September 31',
+    subject: 'Reservation request',
+    body: 'Hello, I need to make a reservation for 8 people for Tuesday 9/31 at 1pm.',
+    expectedClassification: 'opportunity',
+    expectedCategory: 'reservation',
+    expectValue: false,
+    expectedDateIssue: 'impossible_date',
+  },
+  {
+    name: 'Valid date, wrong weekday: Tuesday September 30, 2026',
+    subject: 'Reservation for 30-40 people',
+    body: 'Hello, I need to make a reservation for 30-40 people for Tuesday, September 30, 2026.',
+    expectedClassification: 'opportunity',
+    // 30-40 guests may be categorized as reservation or private_event
+    // depending on the verified party-size limits — the date issue is the point.
+    expectValue: true,
+    expectedDateIssue: 'weekday_mismatch',
   },
 ];
 
@@ -187,8 +208,13 @@ export default async function(req) {
       }
     }
 
+    // Optional subset: payload { scenarios: ["name", ...] } runs only those —
+    // a full pass makes one model call per scenario.
+    const payload = await req.json().catch(() => ({}));
+    const only = Array.isArray(payload.scenarios) ? payload.scenarios : null;
+    const scenarios = only ? SCENARIOS.filter((s) => only.includes(s.name)) : SCENARIOS;
     const results = [];
-    for (const s of SCENARIOS) {
+    for (const s of scenarios) {
       try {
         const analysis = await analyzeEmail(base44, restaurantName, {
           senderName: 'Test Sender',
@@ -207,12 +233,15 @@ export default async function(req) {
           hasValueEstimate: analysis.has_value_estimate === true,
           expectedValue: !!s.expectValue,
           valueConfidence: analysis.value_confidence || null,
+          dateIssue: analysis.date_issue || null,
           draft: analysis.draft_response || null,
           knowledgeUsed: analysis.knowledge_used || null,
           pass:
             analysis.classification === s.expectedClassification &&
             (!s.expectedCategory || analysis.category === s.expectedCategory) &&
-            analysis.has_value_estimate === !!s.expectValue,
+            analysis.has_value_estimate === !!s.expectValue &&
+            (!s.expectedDateIssue || analysis.date_issue === s.expectedDateIssue) &&
+            (!s.expectedNoDraft || !analysis.draft_response),
         });
       } catch (e) {
         results.push({ scenario: s.name, error: e.message, pass: false });

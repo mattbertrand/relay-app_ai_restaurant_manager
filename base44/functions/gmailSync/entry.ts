@@ -380,6 +380,7 @@ export default async function(req) {
         }, {
           knowledgeContext,
           corrections,
+          timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
         });
       } catch (e) {
         // Analysis failed — keep the email visible and flag it for manual review
@@ -439,6 +440,7 @@ export default async function(req) {
             [analysis.customer_facts, analysis.relay_assessment, analysis.knowledge_used].filter(Boolean).join(' ') +
             ` Relay flagged this with ${analysis.confidence || 'Medium'} confidence.`,
           draft_response: analysis.draft_response || '',
+          last_analyzed_at: new Date().toISOString(),
           is_demo: false,
         });
         opps.push(opp);

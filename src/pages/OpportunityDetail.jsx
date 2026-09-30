@@ -13,6 +13,8 @@ import {
 } from "@/lib/opportunityActions";
 import { NEW_STATUSES, lifecycleStatus, nextStepFor } from "@/lib/opportunityLifecycle";
 import LifecycleStepper from "@/components/LifecycleStepper";
+import PreviousAnalysis from "@/components/PreviousAnalysis";
+import ReanalyzeButton from "@/components/ReanalyzeButton";
 import ResolveDialog from "@/components/ResolveDialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -367,6 +369,13 @@ export default function OpportunityDetail() {
         </div>
       )}
 
+      {/* Previous analysis — preserved when the analysis was regenerated */}
+      {opp.previous_analysis && (
+        <div className="mb-6">
+          <PreviousAnalysis text={opp.previous_analysis} />
+        </div>
+      )}
+
       {/* Recommended action */}
       {opp.recommended_action && (
         <div className="bg-primary/5 rounded-xl border border-primary/20 p-5 mb-6">
@@ -395,6 +404,13 @@ export default function OpportunityDetail() {
             >
               {draftStatus}
             </span>
+            {!editing && !isApproved && actionsVisible && !opp.is_demo && (
+              <ReanalyzeButton
+                opportunityId={id}
+                onChanged={loadData}
+                label="Re-analyze with current knowledge"
+              />
+            )}
             {!editing && !isApproved && actionsVisible && (
               <Button variant="ghost" size="sm" onClick={startEditing}>
                 <Edit3 className="w-3.5 h-3.5 mr-1.5" /> Edit

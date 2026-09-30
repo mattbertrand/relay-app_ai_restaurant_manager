@@ -76,6 +76,36 @@ export default async function(req) {
   const e = matchExistingConversation({ convos, rfcToConversationId: rfcIndex, threadId: 'tE', inReplyTo: '', references: [] });
   check('E: unrelated inquiry from the same sender → separate conversation', !e);
 
+  // Test F — two similar reservations from the same sender, separate Gmail
+  // threads: similar wording and the same subject must NOT merge them. If
+  // Gmail filed them in the same thread, they stay one conversation.
+  const fConvos = [
+    {
+      id: 'f1', source: 'Gmail', is_demo: false, customer_email: SENDER,
+      subject: 'Reservation',
+      message: 'Hello, I need to make a reservation on Tuesday at 9am.',
+      gmail_thread_id: 'tf1', received_at: now,
+    },
+    {
+      id: 'f2', source: 'Gmail', is_demo: false, customer_email: SENDER,
+      subject: 'Reservation',
+      message: 'Hello, I need to make a reservation for 8 people for Tuesday 9/31 at 1pm.',
+      gmail_thread_id: 'tf2', received_at: now,
+    },
+  ];
+  // A NEW message from the same sender in a fresh Gmail thread (tf3): no
+  // thread identity, no reply headers → never linked to either reservation.
+  const fSeparate = matchExistingConversation({ convos: fConvos, rfcToConversationId: {}, threadId: 'tf3', inReplyTo: '', references: [] });
+  check('F: similar reservations, separate Gmail threads → separate conversations', !fSeparate);
+  const fLinked = matchExistingConversation({ convos: fConvos, rfcToConversationId: {}, threadId: 'tf1', inReplyTo: '', references: [] });
+  check('F: a message in an existing Gmail thread joins its own conversation', fLinked && fLinked.id === 'f1');
+  const fDup = findDuplicateConversation([fConvos[0]], { senderEmail: SENDER, subject: 'Reservation', body: fConvos[1].message });
+  check(
+    'F: similar wording from the same sender is not a duplicate merge',
+    !fDup,
+    `similarity=${bodySimilarity(fConvos[0].message, fConvos[1].message)}`
+  );
+
   // Safety net — an exact re-send of identical content IS a duplicate
   const resend = findDuplicateConversation(convos, {
     senderEmail: SENDER,

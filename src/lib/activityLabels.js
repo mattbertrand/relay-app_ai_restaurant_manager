@@ -13,6 +13,7 @@ export const ACTIVITY_LABELS = {
   opportunity_dismissed: "Opportunity dismissed",
   followup_linked: "Customer follow-up received",
   classification_changed: "Classification changed",
+  reanalyzed: "Re-analyzed with current knowledge",
   message_reviewed: "Message re-reviewed",
   reply_recorded: "Reply recorded",
   moved_to_new: "Moved back to New",

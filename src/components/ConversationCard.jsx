@@ -4,6 +4,8 @@ import StatusBadge from "@/components/StatusBadge";
 import AttentionReply from "@/components/AttentionReply";
 import DraftProvenance from "@/components/DraftProvenance";
 import ConversationOriginal from "@/components/ConversationOriginal";
+import PreviousAnalysis from "@/components/PreviousAnalysis";
+import ReanalyzeButton from "@/components/ReanalyzeButton";
 import { Button } from "@/components/ui/button";
 import { Mail, Archive, AlertCircle, Undo2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
@@ -13,7 +15,7 @@ import { cn } from "@/lib/utils";
 // One inbox conversation. The Inbox lifecycle (New → Reply recorded → Archived)
 // is the state of the message itself — separate from the related opportunity's
 // New → In Progress → Resolved lifecycle.
-export default function ConversationCard({ convo, isLive, highlighted, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy }) {
+export default function ConversationCard({ convo, isLive, highlighted, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy, onReanalyzed }) {
   const showActions = isLive;
   const showDraft = isLive && convo.analysis_status === "Attention" && !!convo.draft_response;
 
@@ -63,6 +65,7 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
           )}
           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
           {isLive && <ConversationOriginal convo={convo} />}
+          {isLive && <PreviousAnalysis text={convo.previous_analysis} className="mt-2.5" />}
           {showDraft && <DraftProvenance convo={convo} />}
           {showDraft && (
             <AttentionReply
@@ -103,6 +106,9 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
                 >
                   <Undo2 className="w-3.5 h-3.5 mr-1.5" /> Move back to New
                 </Button>
+              )}
+              {isLive && convo.analysis_status && convo.analysis_status !== "Not analyzed" && (
+                <ReanalyzeButton conversationId={convo.id} onChanged={onReanalyzed} />
               )}
               {onCorrect && (
                 <button

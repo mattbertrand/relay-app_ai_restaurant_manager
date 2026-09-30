@@ -58,6 +58,15 @@
       "type": "integer",
       "description": "The classifier rules version this message was last analyzed with \u2014 lets re-analysis skip conversations already classified by the current rules."
     },
+    "last_analyzed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this conversation's analysis was last generated \u2014 used to detect that Restaurant Knowledge changed since the analysis."
+    },
+    "previous_analysis": {
+      "type": "string",
+      "description": "Snapshot of the analysis as it stood before the last re-analysis (classification, reasoning, draft) \u2014 preserved for audit so nothing is silently overwritten."
+    },
     "intent": {
       "type": "string",
       "description": "Short phrase naming the customer's or sender's intent, e.g. 'Operating Hours', 'Reservation Request'."

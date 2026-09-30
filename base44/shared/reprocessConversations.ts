@@ -153,6 +153,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       }, {
         knowledgeContext,
         corrections,
+        timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
       });
     } catch (e) {
       // Analysis failed — keep the email visible and flagged for manual review
@@ -198,6 +199,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
           [analysis.customer_facts, analysis.relay_assessment, analysis.knowledge_used].filter(Boolean).join(" ") +
           ` Relay flagged this with ${analysis.confidence || "Medium"} confidence.`,
         draft_response: analysis.draft_response || "",
+        last_analyzed_at: new Date().toISOString(),
       };
 
       let oppId = linkedOpp ? linkedOpp.id : "";

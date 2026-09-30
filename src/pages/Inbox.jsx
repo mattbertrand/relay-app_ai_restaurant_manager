@@ -364,6 +364,7 @@ export default function Inbox() {
                   onMarkReplied={markReplied}
                   onMoveToNew={moveToNew}
                   replyBusy={replyBusy}
+                  onReanalyzed={loadData}
                 />
                 {similar.length > 0 && (
                   <div className="pl-2 md:pl-4">
@@ -392,6 +393,7 @@ export default function Inbox() {
                             onMarkReplied={markReplied}
                             onMoveToNew={moveToNew}
                             replyBusy={replyBusy}
+                            onReanalyzed={loadData}
                           />
                         ))}
                       </div>
