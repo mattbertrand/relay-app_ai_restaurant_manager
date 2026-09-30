@@ -23,19 +23,27 @@ export default function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Page content mounts only after the restaurant's timezone has loaded, so
+  // every timestamp on screen is formatted with the configured zone from the
+  // first render (never the browser's timezone).
+  const [timezoneReady, setTimezoneReady] = useState(false);
 
   // Load the restaurant's configured timezone once — every displayed
   // timestamp (activity history, received times, opportunity dates) uses it.
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setTimezoneReady(false); return; }
     const rid = getRestaurantId(user);
-    if (!rid) return;
+    if (!rid) { setTimezoneReady(true); return; }
     let cancelled = false;
+    setTimezoneReady(false);
     base44.entities.RestaurantKnowledge.filter({ restaurant_id: rid }, null, 1)
       .then((records) => {
         if (!cancelled) setActiveTimezone(records[0]?.timezone || "America/Los_Angeles");
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setTimezoneReady(true);
+      });
     return () => { cancelled = true; };
   }, [user]);
 
@@ -157,7 +165,13 @@ export default function AppLayout() {
       {/* Main content */}
       <div className="md:pl-60">
         <main className="min-h-screen">
-          <Outlet />
+          {timezoneReady ? (
+            <Outlet />
+          ) : (
+            <div className="flex items-center justify-center min-h-screen">
+              <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+            </div>
+          )}
         </main>
       </div>
 

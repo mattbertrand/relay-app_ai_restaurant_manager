@@ -15,9 +15,10 @@ export function formatValueRange(min, max) {
 
 // The restaurant's configured local timezone (IANA name). All displayed
 // timestamps — activity history, received times, opportunity dates — are
-// shown in this timezone; stored timestamps stay UTC. Unset falls back to
-// the viewer's own browser timezone.
-let activeTimezone = null;
+// shown in this timezone; stored timestamps stay UTC. Until the configured
+// timezone loads, this defaults to the restaurant's timezone (Pacific Time
+// for Oak & Vine) — never the viewer's browser timezone.
+let activeTimezone = "America/Los_Angeles";
 
 export function setActiveTimezone(tz) {
   activeTimezone = typeof tz === "string" && tz ? tz : null;
