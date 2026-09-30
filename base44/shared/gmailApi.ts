@@ -15,7 +15,7 @@ export async function getGmailProfile(accessToken) {
 }
 
 export async function listInboxMessages(accessToken, maxResults = 25) {
-  const query = "in:inbox newer_than:30d -category:promotions -category:social -category:forums";
+  const query = "in:inbox -in:trash -in:spam newer_than:30d -category:promotions -category:social -category:forums";
   const url = `${GMAIL_API}/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {

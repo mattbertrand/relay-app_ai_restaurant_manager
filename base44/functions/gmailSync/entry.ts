@@ -132,6 +132,12 @@ export default async function(req) {
         continue;
       }
 
+      // Message-level label check: a search result can still surface a
+      // message the user deleted or archived (e.g. moved to Trash between
+      // listing and fetch). Only messages actually in the Inbox are imported.
+      const labels = (message.labelIds || []).map((l) => String(l).toUpperCase());
+      if (labels.includes('TRASH') || labels.includes('SPAM') || !labels.includes('INBOX')) continue;
+
       const from = parseFromAddress(getHeader(message, 'From'));
       const fromEmail = (from.email || '').toLowerCase();
       const subject = getHeader(message, 'Subject') || '(no subject)';
