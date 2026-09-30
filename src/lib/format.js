@@ -20,13 +20,27 @@ export function formatValueRange(min, max) {
 // for Oak & Vine) — never the viewer's browser timezone.
 let activeTimezone = "America/Los_Angeles";
 
+// Platform-set timestamps (created_date, updated_date, and record fields set
+// without an explicit offset) arrive as naive ISO strings stored in UTC —
+// e.g. "2026-09-30T05:31:36.594000". JavaScript would parse those as the
+// VIEWER's local time, shifting every display by the timezone offset. Parse
+// offset-less strings as UTC instead; strings that already carry an offset
+// (…Z, …+00:00, …-07:00) are correct as-is.
+function parseTimestamp(dateStr) {
+  if (typeof dateStr !== "string") return new Date(dateStr);
+  if (/Z$/i.test(dateStr) || /[+-]\d{2}:?\d{2}$/.test(dateStr)) return new Date(dateStr);
+  const iso = dateStr.includes(" ") ? dateStr.replace(" ", "T") : dateStr;
+  if (iso.includes("T")) return new Date(iso + "Z");
+  return new Date(iso + "T00:00:00Z");
+}
+
 export function setActiveTimezone(tz) {
   activeTimezone = typeof tz === "string" && tz ? tz : null;
 }
 
 export function formatDate(dateStr) {
   if (!dateStr) return "—";
-  const date = new Date(dateStr);
+  const date = parseTimestamp(dateStr);
   return date.toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric", timeZone: activeTimezone || undefined,
   });
@@ -34,7 +48,7 @@ export function formatDate(dateStr) {
 
 export function formatDateTime(dateStr) {
   if (!dateStr) return "—";
-  const date = new Date(dateStr);
+  const date = parseTimestamp(dateStr);
   return (
     date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: activeTimezone || undefined }) +
     " at " +
@@ -44,7 +58,7 @@ export function formatDateTime(dateStr) {
 
 export function timeAgo(dateStr) {
   if (!dateStr) return "";
-  const date = new Date(dateStr);
+  const date = parseTimestamp(dateStr);
   const now = new Date();
   const seconds = Math.floor((now - date) / 1000);
   if (seconds < 60) return "just now";
