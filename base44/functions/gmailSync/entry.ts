@@ -14,6 +14,7 @@ import {
   loadKnowledge,
   loadRecentFeedback,
   formatKnowledgeForPrompt,
+  formatAdminContextForPrompt,
   formatCorrectionsForPrompt,
 } from "../../shared/restaurantKnowledge.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
@@ -379,6 +380,11 @@ export default async function(req) {
           body: item.body,
         }, {
           knowledgeContext,
+          adminContext: formatAdminContextForPrompt(knowledgeRecord, {
+            senderEmail: item.senderEmail,
+            subject: item.subject,
+            body: item.body,
+          }),
           corrections,
           timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
         });

@@ -51,7 +51,7 @@ export default function ReanalyzeButton({
       }
       toast({
         title: "Analysis regenerated",
-        description: "Re-analyzed with the current Restaurant Knowledge. The previous analysis is preserved.",
+        description: "Re-analyzed with the current Restaurant Profile. The previous analysis is preserved.",
       });
       if (onChanged) onChanged();
     } catch (err) {
@@ -85,7 +85,7 @@ export default function ReanalyzeButton({
             <AlertDialogTitle>Re-analyze this message?</AlertDialogTitle>
             <AlertDialogDescription>
               This response has been edited by a manager. Re-analyzing will generate a new draft based on the
-              current Restaurant Knowledge. The edited version is preserved and recoverable.
+              current Restaurant Profile. The edited version is preserved and recoverable.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

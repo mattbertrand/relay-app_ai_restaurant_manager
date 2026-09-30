@@ -207,3 +207,156 @@ export function formatCorrectionsForPrompt(feedback) {
     return `- For an email like "${f.subject || "(no subject)"}": the manager corrected that it ${phrase}${f.note ? ` — in the manager's words: "${f.note}"` : ""}`;
   });
 }
+
+// ---------------------------------------------------------------------------
+// RESTAURANT PROFILE — Administration & Operations context
+//
+// The customer-facing knowledge above is always included. These administration
+// areas (HR, vendors, finance, operations, marketing) are included ONLY when
+// the message actually touches them, so prompts stay focused on the relevant
+// context instead of dumping the whole profile into every email.
+// ---------------------------------------------------------------------------
+
+const HR_KEYWORDS =
+  /\b(hir(e|es|ing)|job|jobs|opening|positions?|apply|application|resume|c\.?v\.?|interview|employment|employee|staff|work(ing)? (here|with you|for you)|shift)\b/i;
+const VENDOR_KEYWORDS =
+  /\b(vendors?|suppliers?|wholesale|purchase order|\bpo\b|deliver(y|ed|ies|ing)|shipment|shipped|order(ing|ed|s)?|invoice|billing|payment|remit(tance)?|past due|statement|supply|supplies|net \d+)\b/i;
+const FINANCE_KEYWORDS =
+  /\b(invoice|invoicing|billing|payment|remit(tance)?|past due|overdue|account statement|wire|ach|payment terms|net \d+|accounting|bookkeeping)\b/i;
+const OPS_KEYWORDS =
+  /\b(broke(n)? down|not working|equipment|walk-?in|cooler|freezer|oven|dishwasher|plumbing|leak|flood|maintenance|repair|out of order|power outage|emergency)\b/i;
+const MARKETING_KEYWORDS =
+  /\b(promotions?|promo code|social media|instagram|facebook|tiktok|sponsor(ship)?|press|advertisement|ad campaign|influencer|giveaway)\b/i;
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function adminSectionFilled(obj) {
+  if (!obj || typeof obj !== "object") return false;
+  return Object.entries(obj).some(([k, v]) => {
+    if (k === "hiring") return v === true || (v === false && Object.values(obj).some((x) => typeof x === "string" && x.trim()));
+    if (typeof v === "boolean") return v === true;
+    return typeof v === "string" ? v.trim() !== "" : v !== null && v !== undefined;
+  });
+}
+
+function clipped(value, max = 400) {
+  const s = String(value).trim();
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+// Selects the relevant administration section(s) of the Restaurant Profile
+// for one incoming email, and returns them as compact verified context.
+// Conservative: with no match, nothing is added — the analysis simply runs
+// without administration context, exactly as it does today.
+export function formatAdminContextForPrompt(knowledge, email = {}) {
+  if (!knowledge) return null;
+  const text = `${email.subject || ""}\n${email.body || ""}`;
+  const senderEmail = (email.senderEmail || "").toLowerCase().trim();
+
+  // A known vendor is matched by contact email (reliable) or by the vendor's
+  // name appearing in the subject/body (fallback).
+  const vendors = Array.isArray(knowledge.vendors) ? knowledge.vendors.filter(Boolean) : [];
+  const matchedVendor = vendors.find(
+    (v) =>
+      (v.contact_email && senderEmail && String(v.contact_email).toLowerCase().trim() === senderEmail) ||
+      (v.name && String(v.name).trim().length >= 4 &&
+        new RegExp(`\\b${escapeRegExp(String(v.name).trim())}\\b`, "i").test(text))
+  );
+
+  const hrRelevant = adminSectionFilled(knowledge.hr) && HR_KEYWORDS.test(text);
+  const vendorRelevant = vendors.length > 0 && (!!matchedVendor || VENDOR_KEYWORDS.test(text));
+  const financeRelevant = adminSectionFilled(knowledge.finance) && (FINANCE_KEYWORDS.test(text) || !!matchedVendor);
+  const opsRelevant = adminSectionFilled(knowledge.operations) && OPS_KEYWORDS.test(text);
+  const marketingRelevant =
+    adminSectionFilled(knowledge.marketing) && MARKETING_KEYWORDS.test(text);
+
+  if (!hrRelevant && !vendorRelevant && !financeRelevant && !opsRelevant && !marketingRelevant) return null;
+
+  const sections = [];
+
+  if (hrRelevant) {
+    const h = knowledge.hr;
+    const hrLines = [
+      h.hiring === true
+        ? `Currently hiring: yes${h.positions_hiring ? ` — ${clipped(h.positions_hiring)}` : ""}`
+        : h.hiring === false ? "Currently hiring: no" : null,
+      h.hiring === true && h.positions_hiring ? null : line("Positions hiring", h.positions_hiring),
+      line("How to apply", h.application_instructions),
+      line("Application email", h.application_email),
+      line("Application method", h.application_method),
+      line("Interview process", h.interview_process),
+      line("Hiring contact", h.hiring_contact),
+      line("Employee inquiry contact", h.employee_inquiry_contact),
+      line("HR notes", h.hr_notes),
+    ].filter(Boolean);
+    if (hrLines.length) sections.push(`HR / EMPLOYMENT (verified by the restaurant manager)\n${hrLines.join("\n")}`);
+  }
+
+  if (vendorRelevant) {
+    const v = matchedVendor;
+    if (v) {
+      const vendorLines = [
+        `Vendor: ${v.name}${v.category ? ` (${v.category})` : ""}${v.status ? ` — status: ${clipped(v.status)}` : ""}`,
+        line("Contact", [v.contact_name, v.contact_email, v.contact_phone].filter(Boolean).join(", ")),
+        line("Products/services supplied", v.products_services),
+        line("Ordering instructions", v.ordering_instructions),
+        line("Delivery schedule", v.delivery_schedule),
+        line("Ordering cutoff", v.ordering_cutoff),
+        line("Escalation contact", v.escalation_contact),
+        line("Notes", v.notes),
+      ].filter(Boolean);
+      sections.push(`KNOWN VENDOR — THIS SENDER MATCHES A VERIFIED VENDOR (verified by the restaurant manager)\n${vendorLines.join("\n")}`);
+    }
+    const others = vendors.filter((x) => x !== v && x.name).map((x) => `${x.name}${x.category ? ` (${x.category})` : ""}`);
+    if (others.length) {
+      sections.push(`OTHER KNOWN VENDORS (verified): ${others.join("; ")}`);
+    } else if (!v) {
+      sections.push("KNOWN VENDORS (verified): The restaurant's vendor list contains no vendor matching this sender or subject.");
+    }
+  }
+
+  if (financeRelevant) {
+    const f = knowledge.finance;
+    const financeLines = [
+      line("Accounting contact", f.accounting_contact),
+      line("Invoice contact", f.invoice_contact),
+      line("Billing email", f.billing_email),
+      line("Invoice submission procedure", f.invoice_submission_procedure),
+      line("Payment procedure", f.payment_procedure),
+      line("Payment approval requirements", f.payment_approval_requirements),
+      line("Payment deadlines", f.payment_deadlines),
+      line("Finance notes", f.finance_notes),
+    ].filter(Boolean);
+    if (financeLines.length) sections.push(`FINANCE / BILLING (verified by the restaurant manager)\n${financeLines.join("\n")}`);
+  }
+
+  if (opsRelevant) {
+    const o = knowledge.operations;
+    const opsLines = [
+      line("Maintenance contacts", o.maintenance_contacts),
+      line("Equipment contacts", o.equipment_contacts),
+      line("Emergency contacts", o.emergency_contacts),
+      line("Operational policies", o.operational_policies),
+      line("Manager responsibilities", o.manager_responsibilities),
+      line("Operations notes", o.operations_notes),
+    ].filter(Boolean);
+    if (opsLines.length) sections.push(`OPERATIONS (verified by the restaurant manager)\n${opsLines.join("\n")}`);
+  }
+
+  if (marketingRelevant) {
+    const mk = knowledge.marketing;
+    const mkLines = [
+      line("Social media", mk.social_media),
+      line("Marketing contact", mk.marketing_contact),
+      line("Current promotions", mk.current_promotions),
+      line("Recurring promotions", mk.recurring_promotions),
+      line("Brand guidelines", mk.brand_guidelines),
+      line("Marketing notes", mk.marketing_notes),
+    ].filter(Boolean);
+    if (mkLines.length) sections.push(`MARKETING (verified by the restaurant manager)\n${mkLines.join("\n")}`);
+  }
+
+  return sections.length ? sections.join("\n\n") : null;
+}

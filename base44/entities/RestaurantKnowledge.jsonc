@@ -1,6 +1,7 @@
 {
   "name": "RestaurantKnowledge",
   "type": "object",
+  "description": "The restaurant's Restaurant Profile \u2014 verified information the manager entered (customer-facing knowledge plus HR, vendors, finance, operations, and marketing context). Relay uses only what is entered here; it never invents facts.",
   "properties": {
     "restaurant_id": {
       "type": "string"
@@ -112,6 +113,72 @@
     "other_info": {
       "type": "string",
       "description": "Other verified information Relay should know about this restaurant."
+    },
+    "hr": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "HR and employment context: hiring (bool), positions_hiring, application_instructions, application_email, application_method, interview_process, hiring_contact, employee_inquiry_contact, hr_notes. Used to understand job-related communications \u2014 never as customer opportunity content."
+    },
+    "vendors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "contact_name": {
+            "type": "string"
+          },
+          "contact_email": {
+            "type": "string"
+          },
+          "contact_phone": {
+            "type": "string"
+          },
+          "products_services": {
+            "type": "string"
+          },
+          "ordering_instructions": {
+            "type": "string"
+          },
+          "delivery_schedule": {
+            "type": "string"
+          },
+          "ordering_cutoff": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "escalation_contact": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Known vendors and suppliers. Lets Relay recognize communication from a vendor the restaurant already works with (matched by contact email or name) versus unknown cold outreach."
+    },
+    "finance": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Finance and billing context: accounting_contact, invoice_contact, invoice_submission_procedure, payment_procedure, payment_approval_requirements, payment_deadlines, billing_email, finance_notes. Trusted context only \u2014 Relay is not an accounting system."
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Operations context: opening_procedures, closing_procedures, manager_responsibilities, recurring_duties, maintenance_contacts, equipment_contacts, cleaning_procedures, emergency_contacts, operational_policies, operations_notes."
+    },
+    "marketing": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Marketing context: social_media, marketing_contact, current_promotions, recurring_promotions, brand_guidelines, marketing_notes."
     }
   },
   "required": [

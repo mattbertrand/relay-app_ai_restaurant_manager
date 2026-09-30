@@ -154,16 +154,17 @@ export default function Settings() {
               <BookOpen className="w-5 h-5 text-primary" />
             </div>
             <div className="flex-1">
-              <h2 className="font-heading text-lg font-semibold text-foreground mb-1">Restaurant Knowledge</h2>
+              <h2 className="font-heading text-lg font-semibold text-foreground mb-1">Restaurant Profile</h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Teach Relay your hours, reservation rules, event capacity, catering options, menu, and
-                policies. Relay uses only what you enter here — it never invents facts.
+                Teach Relay how your restaurant works — hours, reservation rules, events, menu, policies,
+                plus HR, vendors, finance, and operations. Relay uses only what you enter here — it never
+                invents facts.
               </p>
               <Link
                 to="/knowledge"
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-3"
               >
-                Manage restaurant knowledge <ArrowRight className="w-3.5 h-3.5" />
+                Manage restaurant profile <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import React from "react";
 
 // Lightweight provenance for a suggested reply: what the customer asked and
-// which verified Restaurant Knowledge facts Relay used (or that the profile
+// which verified Restaurant Profile facts Relay used (or that the profile
 // doesn't contain them). Concise by design — trust, not technical reasoning.
 export default function DraftProvenance({ convo }) {
   const points = [];
@@ -15,7 +15,7 @@ export default function DraftProvenance({ convo }) {
         <p className="text-xs font-medium text-muted-foreground">Why Relay drafted this</p>
         {convo.knowledge_used && (
           <span className="text-[10px] font-medium text-primary bg-primary/5 border border-primary/20 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-            Source: Restaurant Knowledge
+            Source: Restaurant Profile
           </span>
         )}
       </div>

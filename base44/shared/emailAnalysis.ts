@@ -87,7 +87,7 @@ export function opportunityTypeFor(category) {
 // the analysis prompt change. Every analyzed conversation is stamped with it,
 // so re-analysis runs skip messages already classified by the current rules
 // and only pick up stale ones (idempotent — no repeated activity noise).
-export const ANALYSIS_VERSION = 4;
+export const ANALYSIS_VERSION = 5;
 
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
@@ -131,11 +131,17 @@ export function conversationUpdatesFor(classification, analysis = {}, options = 
   }
   // Attention messages carry Relay's suggested reply — with a filled-in
   // restaurant profile it often fully answers the question (e.g. verified
-  // Sunday hours). Opportunity drafts live on the Opportunity itself, and
-  // routine/spam have none; re-classification clears any stale draft.
+  // Sunday hours). Administrative messages may carry a short factual draft
+  // when the verified Restaurant Profile answers the sender's question (e.g.
+  // application instructions, a known vendor's ordering process). Opportunity
+  // drafts live on the Opportunity itself, and routine/spam have none;
+  // re-classification clears any stale draft.
   // relay_draft keeps Relay's own generated version so the manager's edit is
   // always distinguishable from the generated one.
-  updates.draft_response = classification === "attention" ? analysis.draft_response || "" : "";
+  updates.draft_response =
+    classification === "attention" || classification === "administrative"
+      ? analysis.draft_response || ""
+      : "";
   updates.relay_draft = updates.draft_response;
   updates.draft_edited = false;
   return updates;
@@ -145,12 +151,28 @@ export async function analyzeEmail(base44, restaurantName, email, options = {}) 
   const knowledgeBlock = options.knowledgeContext
     ? `
 
-VERIFIED RESTAURANT INFORMATION (entered or confirmed by the restaurant manager — this is the authoritative source for restaurant-specific facts)
+VERIFIED RESTAURANT PROFILE (entered or confirmed by the restaurant manager — this is the authoritative source for restaurant-specific facts)
 ${options.knowledgeContext}`
     : `
 
-VERIFIED RESTAURANT INFORMATION
+VERIFIED RESTAURANT PROFILE
 (None provided yet. The restaurant's profile has not been filled in. You must NOT invent any restaurant facts — hours, party-size limits, policies, menu items, catering availability, private-event capacity, none of it. If the customer asks something that needs a restaurant-specific fact, say in knowledge_used that the profile does not contain that information, and draft a response that does not state the fact — e.g. "Let me confirm our Sunday hours for you.")`;
+
+  // Only the relevant Restaurant Profile administration section(s) — HR,
+  // vendors, finance, operations, marketing — are included, selected by the
+  // caller based on what this message is about. Never the whole profile.
+  const adminBlock = options.adminContext
+    ? `
+
+ADDITIONAL VERIFIED RESTAURANT PROFILE — ADMINISTRATION CONTEXT (entered by the restaurant manager)
+${options.adminContext}
+
+RULES FOR ADMINISTRATION CONTEXT:
+- These facts are verified restaurant information — the third source after the manager. Never present them as anything the sender said, and never extend them (do not invent job openings, vendors, payment terms, contacts, or procedures the profile does not state).
+- Employment, hiring, and job-application questions are ALWAYS administrative — never an Opportunity, and never customer-facing revenue content. If the verified HR information answers the sender's question, use it (in knowledge_used and, when helpful, in a short factual draft); if it does not, say plainly that the profile does not contain that information — never invent application procedures, contacts, or interview details.
+- Vendor, invoice, and billing messages are administrative, not Opportunities. If the sender matches a known vendor or the profile describes the process, use those facts. When the profile does not identify the sender or the matter, stay conservative: do not treat it as a customer opportunity, and say plainly that the restaurant has not provided enough verified information to judge it.
+- An invoice, newsletter, or solicitation can never become an Opportunity by itself — only a customer matter can.`
+    : "";
 
   const corrections = options.corrections || [];
   // The restaurant's local date anchors relative dates and weekday checks —
@@ -195,7 +217,7 @@ THREE SOURCES OF INFORMATION — keep them strictly separate and never blur them
 1. VERIFIED RESTAURANT INFORMATION (below): facts the manager entered or confirmed. This is authoritative for restaurant-specific facts. Never contradict it. When you use one of these facts, say so (e.g. "The restaurant profile states a maximum standard party size of 10.").
 2. CUSTOMER-PROVIDED INFORMATION: only what the customer actually wrote (e.g. "The customer is asking about a party of 18.").
 3. YOUR INFERENCE: reasoning that combines the two (e.g. "This appears to be a private-event inquiry."). Never present an inference as a verified restaurant fact, and never invent restaurant facts at all.
-${knowledgeBlock}${correctionsBlock}${dateBlock}${detectedBlock}
+${knowledgeBlock}${adminBlock}${correctionsBlock}${dateBlock}${detectedBlock}
 
 EMAIL
 From: ${email.senderName} <${email.senderEmail}>
@@ -258,7 +280,7 @@ HOW TO DECIDE
 8. why_flagged: 1-2 factual sentences combining what the customer asked for, why it matters, and — when one applies — the verified restaurant fact it relates to (e.g. "The restaurant profile states a maximum standard party size of 10."). Never mention AI, models, algorithms, or technology.
 9. knowledge_used: the verified facts from the profile that apply to this message, or a plain statement that the profile does not contain the needed information. Never list facts you inferred or invented.
 10. recommended_action: one specific action tied to the actual message. Empty string when classification is routine or spam.
-11. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT INFORMATION — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. Empty string when classification is routine, administrative, or spam.
+11. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT PROFILE — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. For administrative messages, write a short factual draft ONLY when the verified Restaurant Profile (including the administration context) answers the sender's question — e.g. verified application instructions or a known vendor's process — and never confirm an interview, an application status, an order, or a payment the profile does not state; otherwise leave it empty. Empty string when classification is routine or spam.
 12. priority: high for customer_service, reservation_issue, time-sensitive requests, and large or high-value opportunities; medium for clear opportunities with specifics; low otherwise.
 
 Return JSON only.`;

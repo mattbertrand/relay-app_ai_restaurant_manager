@@ -11,6 +11,7 @@ import {
   loadKnowledge,
   loadRecentFeedback,
   formatKnowledgeForPrompt,
+  formatAdminContextForPrompt,
   formatCorrectionsForPrompt,
 } from "./restaurantKnowledge.ts";
 
@@ -87,6 +88,11 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
     body,
   }, {
     knowledgeContext: formatKnowledgeForPrompt(knowledge),
+    adminContext: formatAdminContextForPrompt(knowledge, {
+      senderEmail: convo.customer_email,
+      subject: convo.subject,
+      body,
+    }),
     corrections: formatCorrectionsForPrompt(feedback),
     timezone: knowledge ? knowledge.timezone : null,
   });
@@ -186,10 +192,10 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
 
   // Exactly one history entry per re-analysis action.
   const description = opportunity && summary.opportunityUpdated
-    ? `Opportunity re-analyzed using updated Restaurant Knowledge: ${opportunity.title}`
-    : `Re-analyzed using current Restaurant Knowledge: ${convo.subject || "this message"}`;
+    ? `Opportunity re-analyzed using updated Restaurant Profile: ${opportunity.title}`
+    : `Re-analyzed using current Restaurant Profile: ${convo.subject || "this message"}`;
   const suffixes = [];
-  if (knowledgeChanged) suffixes.push("Restaurant Knowledge had changed since the previous analysis");
+  if (knowledgeChanged) suffixes.push("Restaurant Profile had changed since the previous analysis");
   if (classificationBefore !== summary.classificationAfter) {
     suffixes.push(`classification changed from ${classificationBefore} to ${summary.classificationAfter}`);
   }

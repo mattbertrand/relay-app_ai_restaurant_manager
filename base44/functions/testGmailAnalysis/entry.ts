@@ -4,11 +4,12 @@ import {
   loadKnowledge,
   loadRecentFeedback,
   formatKnowledgeForPrompt,
+  formatAdminContextForPrompt,
   formatCorrectionsForPrompt,
 } from "../../shared/restaurantKnowledge.ts";
 
 // Controlled test scenarios for the Gmail → analysis pipeline, run against
-// this restaurant's verified Restaurant Knowledge. Nothing is written to real
+// this restaurant's verified Restaurant Profile. Nothing is written to real
 // data — the manager can see exactly how Relay would classify and answer.
 const SCENARIOS = [
   {
@@ -40,7 +41,9 @@ const SCENARIOS = [
     subject: 'Reservation for 12',
     body: 'Hi, can I make a reservation for 12 people on Saturday night?',
     expectedClassification: 'opportunity',
-    expectedCategory: 'reservation',
+    // 12 guests sits on the party-size boundary — reservation or private_event
+    // are both legitimate readings of the same rules.
+    expectedCategories: ['reservation', 'private_event'],
     expectValue: true,
   },
   {
@@ -124,13 +127,14 @@ const SCENARIOS = [
     expectValue: false,
   },
   {
+    // With verified HR information in the Restaurant Profile, a short factual
+    // draft answering the question is correct — never a customer Opportunity.
     name: 'Job application',
     subject: 'Bartender Position',
     body: 'Hello, I am an experienced bartender interested in joining your team. I have attached my resume and would love to discuss any open positions.',
     expectedClassification: 'administrative',
     expectedCategory: 'job_application',
     expectValue: false,
-    expectedNoDraft: true,
   },
   {
     name: 'Job application follow-up',
@@ -139,7 +143,6 @@ const SCENARIOS = [
     expectedClassification: 'administrative',
     expectedCategory: 'job_application',
     expectValue: false,
-    expectedNoDraft: true,
   },
   {
     name: 'No actionable intent',
@@ -175,6 +178,47 @@ const SCENARIOS = [
     expectValue: true,
     expectedDateIssue: 'weekday_mismatch',
   },
+  {
+    name: 'HR question: are you hiring?',
+    subject: 'Are you hiring?',
+    body: 'Hi, are you currently hiring servers? I have three years of experience and would love to apply.',
+    senderEmail: 'jobseeker@example.com',
+    expectedClassification: 'administrative',
+    expectedCategory: 'job_application',
+    expectValue: false,
+    // The profile's verified HR information should power a short factual draft
+    expectedDraft: true,
+  },
+  {
+    name: 'Where to apply question',
+    subject: 'How can I apply?',
+    body: 'Hello, where can I apply to work at your restaurant?',
+    senderEmail: 'applicant@example.com',
+    expectedClassification: 'administrative',
+    expectedCategory: 'job_application',
+    expectValue: false,
+    expectedDraft: true,
+  },
+  {
+    name: 'Invoice from a known vendor',
+    subject: "Invoice for this week's produce delivery",
+    body: "Please find our invoice attached for this week's produce delivery, payment terms net 30.",
+    senderEmail: 'orders@cascadeproduce.example.com',
+    expectedClassification: 'administrative',
+    expectedCategories: ['vendor', 'billing_administrative'],
+    expectValue: false,
+  },
+  {
+    // Obvious promotional cold outreach stays conservative: Spam — never an
+    // Opportunity, and the profile's vendor list does not identify the sender.
+    name: 'Unknown vendor cold outreach',
+    subject: 'Premium linens for your restaurant',
+    body: 'We supply premium restaurant linens at unbeatable prices. Reply for a free quote!',
+    senderEmail: 'sales@textilepros.example.com',
+    expectedClassification: 'spam',
+    expectedCategories: ['spam', 'irrelevant_promotional', 'newsletter'],
+    expectValue: false,
+  },
 ];
 
 export default async function(req) {
@@ -187,6 +231,7 @@ export default async function(req) {
     let restaurantName = 'the restaurant';
     let knowledgeContext = null;
     let corrections = [];
+    let knowledgeRecordForAdmin = null;
     if (restaurantId) {
       try {
         const restaurant = await base44.entities.Restaurant.get(restaurantId);
@@ -203,6 +248,9 @@ export default async function(req) {
         ]);
         knowledgeContext = formatKnowledgeForPrompt(knowledgeRecord);
         corrections = formatCorrectionsForPrompt(feedback);
+        // The profile's administration sections (HR, vendors, finance, …) are
+        // selected per scenario inside the loop below.
+        knowledgeRecordForAdmin = knowledgeRecord;
       } catch (e) {
         // run without knowledge context
       }
@@ -218,11 +266,16 @@ export default async function(req) {
       try {
         const analysis = await analyzeEmail(base44, restaurantName, {
           senderName: 'Test Sender',
-          senderEmail: 'test.sender@example.com',
+          senderEmail: s.senderEmail || 'test.sender@example.com',
           subject: s.subject,
           body: s.body,
         }, {
           knowledgeContext,
+          adminContext: formatAdminContextForPrompt(knowledgeRecordForAdmin, {
+            senderEmail: s.senderEmail || 'test.sender@example.com',
+            subject: s.subject,
+            body: s.body,
+          }),
           corrections,
         });
         results.push({
@@ -241,7 +294,9 @@ export default async function(req) {
             (!s.expectedCategory || analysis.category === s.expectedCategory) &&
             analysis.has_value_estimate === !!s.expectValue &&
             (!s.expectedDateIssue || analysis.date_issue === s.expectedDateIssue) &&
-            (!s.expectedNoDraft || !analysis.draft_response),
+            (!s.expectedNoDraft || !analysis.draft_response) &&
+            (!s.expectedDraft || !!analysis.draft_response) &&
+            (!s.expectedCategories || s.expectedCategories.includes(analysis.category)),
         });
       } catch (e) {
         results.push({ scenario: s.name, error: e.message, pass: false });

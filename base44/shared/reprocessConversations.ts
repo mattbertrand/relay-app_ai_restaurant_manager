@@ -8,6 +8,7 @@ import {
   loadKnowledge,
   loadRecentFeedback,
   formatKnowledgeForPrompt,
+  formatAdminContextForPrompt,
   formatCorrectionsForPrompt,
 } from "./restaurantKnowledge.ts";
 
@@ -152,6 +153,11 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         body,
       }, {
         knowledgeContext,
+        adminContext: formatAdminContextForPrompt(knowledgeRecord, {
+          senderEmail: convo.customer_email,
+          subject: convo.subject,
+          body,
+        }),
         corrections,
         timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
       });
