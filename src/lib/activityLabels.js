@@ -18,10 +18,18 @@ export const ACTIVITY_LABELS = {
   reply_recorded: "Reply recorded",
   moved_to_new: "Moved back to New",
   archived: "Archived",
+  review_received: "Review received",
+  review_analyzed: "Review analyzed",
+  review_flagged: "Relay flagged this review",
+  review_reviewed: "Manager picked this up",
+  review_resolved: "Review marked Resolved",
+  review_reopened: "Review reopened",
+  review_response_published: "Response published",
+  review_response_publish_failed: "Response publication failed",
 };
 
 // Internal bookkeeping that never belongs in the manager-facing history.
-export const HIDDEN_ACTIVITY_TYPES = ["email_merged", "status_update", "sync", "message_reviewed"];
+export const HIDDEN_ACTIVITY_TYPES = ["email_merged", "status_update", "sync", "message_reviewed", "review_content_expired", "review_sync"];
 
 export function isUserFacingActivity(activity) {
   return activity && !HIDDEN_ACTIVITY_TYPES.includes(activity.type);

@@ -1,0 +1,45 @@
+{
+  "name": "Review Source Sync",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 6,
+      "interval_unit": "hours",
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "review_source_sync",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "sync_review_sources": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "reviewSync",
+            "args": {}
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Sync review sources",
+            "description": "Import, analyze, enforce retention"
+          }
+        }
+      }
+    ]
+  },
+  "description": "Periodically synchronizes connected review sources \u2014 imports new reviews, analyzes them against the Restaurant Profile, updates attention state, and enforces provider content-retention rules. Never publishes responses."
+}

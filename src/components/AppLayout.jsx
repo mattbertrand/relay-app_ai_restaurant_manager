@@ -3,17 +3,18 @@ import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { getRestaurantId, getInitials, setActiveTimezone } from "@/lib/format";
 import { base44 } from "@/api/base44Client";
-import { Sun, Target, Inbox, CheckSquare, Settings, LogOut, Menu, X } from "lucide-react";
+import { Sun, Target, Inbox, Star, CheckSquare, Settings, LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import UnsavedChangesGuard from "@/components/UnsavedChangesGuard";
 
-const ICON_MAP = { Sun, Target, Inbox, CheckSquare, Settings };
+const ICON_MAP = { Sun, Target, Inbox, Star, CheckSquare, Settings };
 
 const NAV_ITEMS = [
   { label: "Today", path: "/today", icon: "Sun" },
   { label: "Opportunities", path: "/opportunities", icon: "Target" },
   { label: "Inbox", path: "/inbox", icon: "Inbox" },
+  { label: "Reviews", path: "/reviews", icon: "Star" },
   { label: "Actions", path: "/actions", icon: "CheckSquare" },
   { label: "Settings", path: "/settings", icon: "Settings" },
 ];

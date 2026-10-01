@@ -19,6 +19,8 @@ import Today from '@/pages/Today';
 import Opportunities from '@/pages/Opportunities';
 import OpportunityDetail from '@/pages/OpportunityDetail';
 import Inbox from '@/pages/Inbox';
+import Reviews from '@/pages/Reviews';
+import ReviewDetail from '@/pages/ReviewDetail';
 import Actions from '@/pages/Actions';
 import Settings from '@/pages/Settings';
 import RestaurantKnowledge from '@/pages/RestaurantKnowledge';
@@ -61,6 +63,8 @@ const AuthenticatedApp = () => {
           <Route path="/opportunities" element={<Opportunities />} />
           <Route path="/opportunities/:id" element={<OpportunityDetail />} />
           <Route path="/inbox" element={<Inbox />} />
+          <Route path="/reviews" element={<Reviews />} />
+          <Route path="/reviews/:id" element={<ReviewDetail />} />
           <Route path="/actions" element={<Actions />} />
           <Route path="/knowledge" element={<RestaurantKnowledge />} />
           <Route path="/settings" element={<Settings />} />

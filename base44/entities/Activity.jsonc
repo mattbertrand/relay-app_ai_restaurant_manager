@@ -12,6 +12,10 @@
       "type": "string",
       "description": "The conversation (email thread) this event belongs to, when the event is about a specific message. Together with opportunity_id this makes every history event unambiguously scoped: an opportunity's history shows only events with its own opportunity_id or the conversation_id of its own linked conversation."
     },
+    "review_id": {
+      "type": "string",
+      "description": "The review this event belongs to, when the event is about a specific review. A review's history shows only events with its own review_id \u2014 never restaurant-wide activity."
+    },
     "action_id": {
       "type": "string"
     },
@@ -19,7 +23,8 @@
       "type": "string"
     },
     "description": {
-      "type": "string"
+      "type": "string",
+      "description": "Short human-readable description. Never contains full provider review content (e.g. Google review text)."
     },
     "is_demo": {
       "type": "boolean",

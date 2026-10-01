@@ -1,0 +1,189 @@
+{
+  "name": "Review",
+  "type": "object",
+  "description": "A normalized, provider-agnostic review. Provider-controlled content (review text, reviewer info, owner response) is retained only within the provider's data-retention window; durable Relay operational metadata (classification, status, outcome) survives expiry.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "review_source_id": {
+      "type": "string",
+      "description": "The ReviewSource this review came from."
+    },
+    "provider": {
+      "type": "string"
+    },
+    "external_review_id": {
+      "type": "string",
+      "description": "The provider's review ID. Together with provider this is the review's primary identity \u2014 duplicate protection is keyed on it."
+    },
+    "external_location_id": {
+      "type": "string"
+    },
+    "reviewer_name": {
+      "type": "string",
+      "description": "Reviewer display name (provider-controlled content)."
+    },
+    "rating": {
+      "type": "integer",
+      "description": "Star rating, 1-5, provider's scale."
+    },
+    "review_text": {
+      "type": "string",
+      "description": "Raw review content (provider-controlled). Cleared when the provider's retention window expires."
+    },
+    "review_created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the review was posted at the provider."
+    },
+    "source_url": {
+      "type": "string",
+      "description": "Link to the review at the provider, when available (provider-controlled)."
+    },
+    "owner_response": {
+      "type": "string",
+      "description": "The owner's existing public response at the provider, when one exists (provider-controlled)."
+    },
+    "owner_response_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "Opportunity",
+        "Attention",
+        "Routine",
+        "Spam"
+      ],
+      "description": "Relay's attention classification \u2014 same top-level taxonomy as email. Never every review becomes an Opportunity."
+    },
+    "category": {
+      "type": "string",
+      "description": "What happened, e.g. service_issue, food_quality, safety_allergen_concern, positive_feedback, spam_irrelevant."
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "informational"
+      ],
+      "description": "Derived from content and restaurant context \u2014 never from star rating alone."
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "High",
+        "Medium",
+        "Low"
+      ]
+    },
+    "why_flagged": {
+      "type": "string",
+      "description": "Concise, evidence-based explanation of why this review needs manager attention."
+    },
+    "knowledge_used": {
+      "type": "string",
+      "description": "Which verified Restaurant Profile facts applied, or a plain statement that the profile lacks them."
+    },
+    "recommended_action": {
+      "type": "string"
+    },
+    "draft_response": {
+      "type": "string",
+      "description": "Draft public response. Manager-controlled once edited \u2014 never silently regenerated."
+    },
+    "draft_edited": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once the manager edited the draft."
+    },
+    "previous_analysis": {
+      "type": "string",
+      "description": "Snapshot of the analysis before the last re-analysis, preserved for audit."
+    },
+    "last_analyzed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "response_status": {
+      "type": "string",
+      "enum": [
+        "no_response_needed",
+        "draft_ready",
+        "manager_edited",
+        "published",
+        "publication_failed"
+      ],
+      "default": "no_response_needed",
+      "description": "The public-response workflow status \u2014 separate from the attention status."
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "publish_error": {
+      "type": "string",
+      "description": "Why a publication attempt failed, in plain language."
+    },
+    "manager_status": {
+      "type": "string",
+      "enum": [
+        "New",
+        "In Progress",
+        "Resolved"
+      ],
+      "default": "New",
+      "description": "The attention lifecycle: New \u2192 In Progress \u2192 Resolved. Publishing a response never resolves the underlying issue."
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When Relay first imported this review."
+    },
+    "last_synced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When provider-controlled content must be expired under the provider's data-retention policy."
+    },
+    "content_expired": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once provider-controlled content was cleared per the retention policy. The durable operational metadata remains."
+    },
+    "is_demo": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "provider",
+    "external_review_id"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

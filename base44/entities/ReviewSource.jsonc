@@ -1,0 +1,93 @@
+{
+  "name": "ReviewSource",
+  "type": "object",
+  "description": "A provider-agnostic connection between a restaurant and an external review source (Google Business Profile first). Holds connection and synchronization state only \u2014 never OAuth access tokens, which stay server-side.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string",
+      "description": "Provider identifier, e.g. 'google', 'demo'. Future: 'yelp', 'tripadvisor', 'facebook'."
+    },
+    "provider_account_id": {
+      "type": "string",
+      "description": "The account identifier at the provider (e.g. Google Business Profile account name)."
+    },
+    "provider_account_name": {
+      "type": "string"
+    },
+    "provider_location_id": {
+      "type": "string",
+      "description": "The external location/business identifier the restaurant selected to monitor."
+    },
+    "provider_location_name": {
+      "type": "string",
+      "description": "Human-readable name of the monitored location, e.g. 'Oak & Vine \u2014 downtown'."
+    },
+    "connection_status": {
+      "type": "string",
+      "enum": [
+        "not_connected",
+        "connected",
+        "error"
+      ],
+      "default": "not_connected"
+    },
+    "oauth_scope": {
+      "type": "string",
+      "description": "The OAuth scope(s) granted for this connection, e.g. 'https://www.googleapis.com/auth/business.manage'. Metadata only \u2014 tokens are never stored here."
+    },
+    "last_successful_sync": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_sync_attempt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sync_status": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "in_progress",
+        "failed"
+      ],
+      "default": "idle"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "The last provider or connection error, in plain language."
+    },
+    "connected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "retention_days": {
+      "type": "integer",
+      "description": "Provider content retention window in days for reviews from this source (null when the provider imposes no limit, e.g. demo data)."
+    },
+    "is_demo": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "provider"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}
