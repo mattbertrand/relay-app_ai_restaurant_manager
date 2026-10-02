@@ -1,0 +1,65 @@
+{
+  "name": "MenuItem",
+  "type": "object",
+  "description": "One dish or drink on the restaurant's menu. Imported from an uploaded menu file or the restaurant's website, or entered manually. The manager edits individual items here as the menu changes, so a small change never requires re-uploading the whole menu.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "section": {
+      "type": "string",
+      "description": "Menu section the item belongs to, e.g. 'Starters', 'Mains', 'Desserts'."
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "description": "The item's short description as it appears on the menu."
+    },
+    "price": {
+      "type": "string",
+      "description": "Price as displayed on the menu (string to preserve formats like 'MP' or a range)."
+    },
+    "dietary": {
+      "type": "string",
+      "description": "Dietary notes for this item, e.g. 'vegetarian, gluten-free'."
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "upload",
+        "website",
+        "manual"
+      ],
+      "description": "Where this item came from. Re-importing replaces unedited items of the same origin; manual items and manager-edited items are always preserved."
+    },
+    "edited": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once the manager edited this item \u2014 it is then manager-controlled and never replaced by a re-import."
+    },
+    "position": {
+      "type": "integer",
+      "description": "Display order within the menu."
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "name"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

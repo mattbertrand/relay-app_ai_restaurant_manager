@@ -9,6 +9,7 @@ import ReservationsEditor from "@/components/knowledge/ReservationsEditor";
 import EventsCateringEditor from "@/components/knowledge/EventsCateringEditor";
 import OfferingsEditor from "@/components/knowledge/OfferingsEditor";
 import MenuPoliciesEditor from "@/components/knowledge/MenuPoliciesEditor";
+import MenuItemsEditor from "@/components/knowledge/MenuItemsEditor";
 import HREditor from "@/components/knowledge/HREditor";
 import VendorsEditor from "@/components/knowledge/VendorsEditor";
 import FinanceEditor from "@/components/knowledge/FinanceEditor";
@@ -54,7 +55,7 @@ const GROUPS = [
     icon: UtensilsCrossed,
     sections: [
       { id: "offerings", icon: UtensilsCrossed, title: "Happy hour & recurring offerings", description: "Happy hour, brunch, live music, trivia, and other regular happenings." },
-      { id: "menu", icon: UtensilsCrossed, title: "Menu & dietary information", description: "Dietary options, allergens, and accommodations — Relay checks this before answering dietary questions." },
+      { id: "menu", icon: UtensilsCrossed, title: "Menu & dietary information", description: "Your menu items, dietary options, allergens, and accommodations — Relay checks this before answering menu or dietary questions." },
     ],
   },
   {
@@ -222,7 +223,10 @@ export default function RestaurantKnowledge() {
       case "menu":
         return (
           <KnowledgeSection {...common}>
-            <MenuPoliciesEditor value={knowledge} onChange={setKnowledge} part="menu" />
+            <MenuItemsEditor restaurantId={getRestaurantId(user)} />
+            <div className="mt-6 border-t border-border pt-6">
+              <MenuPoliciesEditor value={knowledge} onChange={setKnowledge} part="menu" />
+            </div>
           </KnowledgeSection>
         );
       case "reservations":

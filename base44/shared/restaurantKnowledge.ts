@@ -19,7 +19,23 @@ export async function loadKnowledge(base44, restaurantId) {
     null,
     5
   );
-  return records[0] || null;
+  const record = records[0] || null;
+  if (record) {
+    // The restaurant's structured menu items — imported from an uploaded menu
+    // or the restaurant's website, or entered manually, and kept up to date by
+    // the manager. Loaded alongside the profile so menu inquiries can be
+    // answered from the actual menu.
+    try {
+      const page = await base44.entities.MenuItem.filter(
+        { restaurant_id: restaurantId },
+        { sort: "position", limit: 200 }
+      );
+      record.menu_items = page.items || [];
+    } catch (e) {
+      record.menu_items = [];
+    }
+  }
+  return record;
 }
 
 export async function loadRecentFeedback(base44, restaurantId) {
@@ -170,6 +186,33 @@ export function formatKnowledgeForPrompt(knowledge) {
     line("Special dietary accommodations", m.dietary_accommodations),
   ].filter(Boolean);
   if (menuLines.length) sections.push(`MENU AND OFFERINGS\n${menuLines.join("\n")}`);
+
+  // Structured menu items (imported from an uploaded menu or the restaurant's
+  // website, or entered manually). Included whenever they exist so menu
+  // questions can be answered from the actual menu rather than a summary.
+  const menuItems = Array.isArray(knowledge.menu_items) ? knowledge.menu_items : [];
+  if (menuItems.length) {
+    const itemLines = menuItems
+      .slice(0, 150)
+      .map((it) => {
+        if (!it || !it.name) return null;
+        const bits = [
+          it.section ? `[${it.section}]` : null,
+          it.name,
+          it.price ? `— ${it.price}` : null,
+          it.description ? `: ${it.description}` : null,
+          it.dietary ? `(dietary: ${it.dietary})` : null,
+        ].filter(Boolean);
+        return `- ${bits.join(" ")}`;
+      })
+      .filter(Boolean);
+    if (itemLines.length) {
+      const note = menuItems.length > 150 ? "\n(Menu list truncated — confirm less common items with the manager.)" : "";
+      sections.push(
+        `FULL MENU (verified menu items maintained by the manager — use these when answering menu questions)\n${itemLines.join("\n")}${note}`
+      );
+    }
+  }
 
   const pol = knowledge.policies || {};
   const policyLines = [
