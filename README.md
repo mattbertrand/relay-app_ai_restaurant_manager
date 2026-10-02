@@ -1,4 +1,19 @@
-# Base44 Project
+# Relay
+
+Relay is a digital operations assistant for independent restaurants. It watches the inboxes and review channels that restaurant managers already juggle — Gmail and Google Business Profile reviews today, with more providers pluggable over time — and turns the noise into a short, prioritized list of what deserves attention today.
+
+## What Relay does
+
+- **Monitors communications** — customer emails and reviews flow into one inbox, with duplicate threads merged and follow-ups kept with their original conversation.
+- **Identifies revenue opportunities** — catering requests, large-party reservations, private events and similar inquiries are surfaced with an estimated potential value, so nothing lucrative slips past a busy shift.
+- **Flags what needs attention** — complaints, safety or allergen concerns, and urgent messages are classified by priority, not by star rating alone.
+- **Drafts responses for review** — every suggested reply is based only on the restaurant's own verified Restaurant Profile (hours, menu, policies, vendors, HR context). Managers edit, approve, and record replies themselves; nothing is ever sent or published automatically.
+- **Learns from corrections** — when a manager reclassifies a message, the feedback steers future analysis for that restaurant only.
+- **Keeps the menu current** — menus can be imported from an uploaded file or the restaurant's website, then edited item by item, so answers to menu questions always match what's actually on the menu.
+
+Relay is built for a human-in-the-loop workflow: it prepares and organizes, the manager decides. External responses (email or public review replies) only go out through explicitly connected providers, and only after explicit approval.
+
+## Project
 
 Use this repository to run and edit the app locally, then publish changes back through Base44.
 
