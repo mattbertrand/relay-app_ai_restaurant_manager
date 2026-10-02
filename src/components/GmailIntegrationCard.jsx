@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Mail, Loader2, RefreshCw, RefreshCcw, XCircle, FlaskConical, Check } from "lucide-react";
+import GmailImportSetup, { initialImportLabel } from "@/components/GmailImportSetup";
 
 const GMAIL_CONNECTOR_ID = "6ab4c39dd81d1c8bc44d5db3";
 
@@ -73,6 +74,8 @@ export default function GmailIntegrationCard() {
   const [testResults, setTestResults] = useState(null);
   const [reanalyzing, setReanalyzing] = useState(false);
   const [reanalyzeSummary, setReanalyzeSummary] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(null);
 
   const checkStatus = useCallback(async () => {
     try {
@@ -102,6 +105,55 @@ export default function GmailIntegrationCard() {
     }
   };
 
+  // Runs the initial backfill in batches until Relay reports it is done,
+  // showing live progress — never appearing frozen on a large history.
+  const runInitialImport = async (windowChoice, fromDate) => {
+    setImporting(true);
+    setImportProgress(null);
+    setSyncSummary(null);
+    let acc = { imported: 0, analyzed: 0, opportunities: 0 };
+    let finished = false;
+    let lastSummary = null;
+    try {
+      for (let i = 0; i < 60; i++) {
+        const res = await base44.functions.invoke("gmailSync", {
+          initial_import: true,
+          window: windowChoice,
+          from_date: fromDate || undefined,
+        });
+        const s = res.data || {};
+        if (s.error) {
+          setImportProgress({ ...acc, error: `Initial import failed: ${s.error}` });
+          break;
+        }
+        lastSummary = s;
+        acc = {
+          imported: acc.imported + (s.newMessages || 0),
+          analyzed: acc.analyzed + (s.analyzed || 0),
+          opportunities: acc.opportunities + (s.opportunitiesCreated || 0),
+        };
+        setImportProgress({ ...acc, running: true });
+        if (s.initial_import && s.initial_import.done) {
+          finished = true;
+          break;
+        }
+      }
+      if (!finished) {
+        setImportProgress({
+          ...acc,
+          error:
+            "Relay hasn't finished reviewing your selected history yet. Start the import again to continue where it left off.",
+        });
+      }
+      if (lastSummary) setSyncSummary(lastSummary);
+    } catch (err) {
+      setImportProgress({ ...acc, error: `Initial import failed: ${errorDetail(err)}` });
+    } finally {
+      setImporting(false);
+      await checkStatus();
+    }
+  };
+
   const handleConnect = async () => {
     setConnecting(true);
     setSyncSummary(null);
@@ -111,10 +163,9 @@ export default function GmailIntegrationCard() {
       const timer = setInterval(async () => {
         if (!popup || popup.closed) {
           clearInterval(timer);
-          const next = await checkStatus();
-          if (next && next.connected) {
-            runSync();
-          }
+          // The manager chooses the initial import scope in the setup step —
+          // no automatic backfill happens on connect.
+          await checkStatus();
         }
       }, 500);
     } catch (err) {
@@ -161,6 +212,7 @@ export default function GmailIntegrationCard() {
   };
 
   const connected = status?.connected;
+  const setupDone = !!(status?.gmail_setup && status.gmail_setup.completed_at);
 
   return (
     <div className="bg-card rounded-xl border border-border p-5">
@@ -182,10 +234,10 @@ export default function GmailIntegrationCard() {
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             {connected
               ? `Connected${status.email ? ` as ${status.email}` : ""}. Incoming customer emails are imported into your Inbox and reviewed for opportunities. Nothing is ever sent to customers without your approval.`
-              : "Connect your restaurant's Gmail inbox to receive customer emails in Relay. Emails from the last 30 days are imported. Nothing is ever sent to customers without your approval."}
+              : "Connect your restaurant's Gmail inbox to receive customer emails in Relay. You'll choose how much recent email history Relay reviews during setup. Nothing is ever sent to customers without your approval."}
           </p>
 
-          {connected && (
+          {connected && setupDone && (
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               <Button size="sm" variant="outline" onClick={runSync} disabled={syncing}>
                 {syncing ? (
@@ -235,6 +287,20 @@ export default function GmailIntegrationCard() {
                 </span>
               )}
             </div>
+          )}
+
+          {connected && !setupDone && (
+            <GmailImportSetup
+              initialSelection={status?.gmail_setup || null}
+              importing={importing}
+              progress={importProgress}
+              onImport={runInitialImport}
+            />
+          )}
+          {connected && setupDone && initialImportLabel(status.gmail_setup) && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Initial email history: {initialImportLabel(status.gmail_setup)}
+            </p>
           )}
 
           {syncSummary && syncSummary.error && (

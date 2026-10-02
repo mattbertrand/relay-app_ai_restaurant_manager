@@ -29,6 +29,11 @@
     "monthly_inquiries": {
       "type": "string"
     },
+    "gmail_setup": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "This restaurant's Gmail connection setup: the initial email history choice (window: 'now' | '7d' | '30d' | 'custom', from_date for custom), when it was selected, and when the initial history import completed. Controls the initial backfill only \u2014 never a permanent monitoring filter."
+    },
     "is_demo": {
       "type": "boolean",
       "default": false

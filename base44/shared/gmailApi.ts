@@ -14,15 +14,25 @@ export async function getGmailProfile(accessToken) {
   return profile.emailAddress || null;
 }
 
-export async function listInboxMessages(accessToken, maxResults = 25) {
-  const query = "in:inbox -in:trash -in:spam newer_than:30d -category:promotions -category:social -category:forums";
-  const url = `${GMAIL_API}/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`;
+// Lists inbox messages. Ongoing monitoring uses the standard recent-mail
+// query; the initial backfill passes `afterEpochSeconds` so Gmail matches
+// each message's OWN received date (never the age of the thread it belongs
+// to). Pagination via pageToken is supported for the backfill.
+export async function listInboxMessages(accessToken, maxResults = 25, opts = {}) {
+  const clauses = ["in:inbox -in:trash -in:spam -category:promotions -category:social -category:forums"];
+  if (opts.afterEpochSeconds) {
+    clauses.push(`after:${Math.floor(opts.afterEpochSeconds)}`);
+  } else {
+    clauses.push("newer_than:30d");
+  }
+  let url = `${GMAIL_API}/messages?maxResults=${maxResults}&q=${encodeURIComponent(clauses.join(" "))}`;
+  if (opts.pageToken) url += `&pageToken=${encodeURIComponent(opts.pageToken)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {
     throw new Error(`Gmail request failed (${res.status})`);
   }
   const data = await res.json();
-  return { messages: data.messages || [] };
+  return { messages: data.messages || [], nextPageToken: data.nextPageToken || null };
 }
 
 export async function fetchMessage(accessToken, messageId) {

@@ -43,6 +43,54 @@ export default async function(req) {
 
     const restaurant = await base44.entities.Restaurant.get(restaurantId);
 
+    // Initial-import configuration — the manager's choice of how much
+    // existing email to analyze when Gmail is first connected. Stored on this
+    // restaurant's record only; it controls the initial backfill exclusively
+    // and is never applied as a permanent Gmail filter.
+    const payload = await req.json().catch(() => ({}));
+    const isBackfill = payload.initial_import === true;
+    let gmailSetup = restaurant.gmail_setup && typeof restaurant.gmail_setup === "object" ? { ...restaurant.gmail_setup } : null;
+    let backfillActive = false;
+    let windowStartMs = null;
+
+    if (isBackfill) {
+      if (gmailSetup && gmailSetup.completed_at) {
+        return Response.json({ connected: true, initial_import: { done: true, window: gmailSetup.window || null } });
+      }
+      const chosenWindow = ["now", "7d", "30d", "custom"].includes(payload.window)
+        ? payload.window
+        : (gmailSetup && gmailSetup.window) || null;
+      if (!chosenWindow) {
+        return Response.json({ error: "Choose how much email Relay should analyze." }, { status: 400 });
+      }
+      const fromDate = chosenWindow === "custom"
+        ? String(payload.from_date || (gmailSetup && gmailSetup.from_date) || "")
+        : "";
+      if (chosenWindow === "custom" && !/^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+        return Response.json({ error: "Choose a valid date for the initial import." }, { status: 400 });
+      }
+      gmailSetup = {
+        ...gmailSetup,
+        window: chosenWindow,
+        from_date: chosenWindow === "custom" ? fromDate : null,
+        selected_at: new Date().toISOString(),
+        completed_at: null,
+      };
+      await base44.entities.Restaurant.update(restaurantId, { gmail_setup: gmailSetup });
+      if (chosenWindow === "now") {
+        // Starting now: no history import at all — only mail arriving from
+        // this point on is monitored, exactly like every later sync.
+        const completed = { ...gmailSetup, completed_at: new Date().toISOString() };
+        await base44.entities.Restaurant.update(restaurantId, { gmail_setup: completed });
+        return Response.json({ connected: true, initial_import: { done: true, window: chosenWindow, imported: 0, analyzed: 0 } });
+      }
+      backfillActive = true;
+      windowStartMs =
+        chosenWindow === "7d" ? Date.now() - 7 * 24 * 60 * 60 * 1000 :
+        chosenWindow === "30d" ? Date.now() - 30 * 24 * 60 * 60 * 1000 :
+        new Date(`${fromDate}T00:00:00Z`).getTime();
+    }
+
     // Verified restaurant knowledge and this restaurant's manager corrections
     // steer the analysis: facts the manager entered are authoritative, and a
     // rule learned from one restaurant never affects another restaurant.
@@ -88,7 +136,6 @@ export default async function(req) {
 
     // Re-run the current analysis on live Gmail conversations classified by an
     // earlier version of the classifier (skips importing new mail)
-    const payload = await req.json().catch(() => ({}));
     if (payload.reprocess) {
       const reprocessSummary = await reprocessConversations({
         base44,
@@ -100,7 +147,27 @@ export default async function(req) {
       return Response.json(reprocessSummary);
     }
 
-    const { messages: gmailMessages } = await listInboxMessages(accessToken);
+    // The backfill query matches each message's OWN received date (Gmail
+    // `after:`), so a brand-new message in a months-old thread is still
+    // included. Ongoing monitoring keeps its standard recent-mail query —
+    // the initial-import window never becomes a permanent filter.
+    let gmailMessages = [];
+    let listPageToken = null;
+    if (backfillActive) {
+      let fetchToken = null;
+      do {
+        const page = await listInboxMessages(accessToken, 50, {
+          afterEpochSeconds: Math.floor(windowStartMs / 1000),
+          pageToken: fetchToken,
+        });
+        gmailMessages = gmailMessages.concat(page.messages);
+        fetchToken = page.nextPageToken || null;
+      } while (fetchToken && gmailMessages.length < 100);
+      listPageToken = fetchToken;
+    } else {
+      const page = await listInboxMessages(accessToken, 25);
+      gmailMessages = page.messages;
+    }
     const summary = {
       connected: true,
       emailsChecked: gmailMessages.length,
@@ -115,6 +182,7 @@ export default async function(req) {
       attentionFlagged: 0,
       needsReview: 0,
     };
+    const maxMessages = backfillActive ? 30 : MAX_MESSAGES;
 
     const toAnalyze = [];
     const ownEmails = [restaurant.email]
@@ -122,9 +190,10 @@ export default async function(req) {
       .filter(Boolean);
 
     const oldestFirst = [...gmailMessages].reverse();
+    let hitCap = false;
     for (const gm of oldestFirst) {
       if (seenMessageIds.has(gm.id)) continue;
-      if (summary.newMessages >= MAX_MESSAGES) break;
+      if (summary.newMessages >= maxMessages) { hitCap = true; break; }
 
       let message;
       try {
@@ -143,9 +212,11 @@ export default async function(req) {
       const fromEmail = (from.email || '').toLowerCase();
       const subject = getHeader(message, 'Subject') || '(no subject)';
       const body = extractTextBody(message.payload);
-      const receivedAt = message.internalDate
-        ? new Date(Number(message.internalDate)).toISOString()
-        : new Date().toISOString();
+      // The import window is enforced per message received timestamp —
+      // never by the age of the Gmail thread a message belongs to.
+      const receivedAtMs = message.internalDate ? Number(message.internalDate) : Date.now();
+      if (backfillActive && receivedAtMs < windowStartMs) continue;
+      const receivedAt = new Date(receivedAtMs).toISOString();
       summary.newMessages++;
 
       // Skip the restaurant's own mail and automated senders
@@ -256,8 +327,10 @@ export default async function(req) {
           restaurant_id: restaurantId,
           opportunity_id: '',
           conversation_id: convo.id,
-          type: 'email_received',
-          description: `Email received: ${subject} from ${from.name}`,
+          type: backfillActive ? 'email_imported' : 'email_received',
+          description: backfillActive
+            ? `Email imported (initial history): ${subject} from ${from.name}`
+            : `Email received: ${subject} from ${from.name}`,
         });
         toAnalyze.push({
           convo,
@@ -326,9 +399,11 @@ export default async function(req) {
           restaurant_id: restaurantId,
           opportunity_id: target.opportunity_id || '',
           conversation_id: target.id,
-          type: threadConvo ? 'email_received' : 'email_merged',
+          type: threadConvo ? (backfillActive ? 'email_imported' : 'email_received') : 'email_merged',
           description: threadConvo
-            ? `Email received: ${subject} from ${from.name}`
+            ? (backfillActive
+                ? `Email imported (initial history): ${subject} from ${from.name}`
+                : `Email received: ${subject} from ${from.name}`)
             : `Duplicate email from ${from.name} merged into an existing conversation ("${subject}")`,
         });
       }
@@ -497,6 +572,19 @@ export default async function(req) {
         // job application follow-up Gmail filed as its own thread) stays its
         // own conversation — sender similarity is never a relationship.
       }
+    }
+
+    if (backfillActive) {
+      // The backfill is only finished when the Gmail list is exhausted AND
+      // every imported conversation has been analyzed; otherwise the caller
+      // keeps calling and progress continues where it left off.
+      const leftoverToAnalyze = Math.max(0, analyzeOrder.length - MAX_ANALYZE);
+      const done = !listPageToken && !hitCap && leftoverToAnalyze === 0;
+      if (done && gmailSetup && !gmailSetup.completed_at) {
+        const completed = { ...gmailSetup, completed_at: new Date().toISOString() };
+        await base44.entities.Restaurant.update(restaurantId, { gmail_setup: completed });
+      }
+      summary.initial_import = { window: gmailSetup ? gmailSetup.window : null, done, remaining: !done };
     }
 
     return Response.json(summary);

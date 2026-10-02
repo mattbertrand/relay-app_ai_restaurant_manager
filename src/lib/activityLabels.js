@@ -3,6 +3,7 @@
 
 export const ACTIVITY_LABELS = {
   email_received: "Customer email received",
+  email_imported: "Email imported (initial history)",
   opportunity_identified: "Opportunity identified",
   draft_prepared: "Draft response created",
   draft_edited: "Response edited",
