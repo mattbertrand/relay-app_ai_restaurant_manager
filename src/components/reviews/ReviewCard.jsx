@@ -11,7 +11,7 @@ import {
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export default function ReviewCard({ review }) {
+export default function ReviewCard({ review, sourceLabel }) {
   const expired = !!review.content_expired;
   return (
     <Link
@@ -23,6 +23,7 @@ export default function ReviewCard({ review }) {
           <Stars rating={review.rating} />
           <span className="text-sm font-medium text-foreground">{review.reviewer_name || "Unknown reviewer"}</span>
           <span className="text-xs text-muted-foreground">{timeAgo(review.review_created_at)}</span>
+          {sourceLabel && <span className="text-xs text-muted-foreground">· {sourceLabel}</span>}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {review.is_demo && (

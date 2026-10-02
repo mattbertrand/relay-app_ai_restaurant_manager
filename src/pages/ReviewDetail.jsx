@@ -47,12 +47,21 @@ export default function ReviewDetail() {
   const [draft, setDraft] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [reanalyzeOpen, setReanalyzeOpen] = useState(false);
+  const [source, setSource] = useState(null);
 
   const loadReview = useCallback(async () => {
     try {
       const r = await base44.entities.Review.get(id);
       setReview(r);
       setDraft(r.draft_response || "");
+      if (r.review_source_id) {
+        try {
+          setSource(await base44.entities.ReviewSource.get(r.review_source_id));
+        } catch (e) {
+          setSource(null);
+        }
+      }
       setActivities(await base44.entities.Activity.filter({ review_id: id }, "-created_date", 50));
       // Opening a New review counts as the manager picking it up — attention
       // moves to In Progress, never to Resolved.
@@ -145,7 +154,7 @@ export default function ReviewDetail() {
     if (actionLoading) return;
     setActionLoading(true);
     try {
-      const res = await base44.functions.invoke("reviewPublishResponse", { review_id: id });
+      const res = await base44.functions.invoke("reviewPublishResponse", { review_id: id, confirm: true });
       const d = res.data || {};
       if (d.published) {
         toast({
@@ -210,6 +219,7 @@ export default function ReviewDetail() {
   }
 
   const providerMeta = PROVIDER_META[review.provider] || { label: review.provider };
+  const locationLabel = !review.is_demo && source && source.provider_location_name ? source.provider_location_name : null;
   const isResolved = review.manager_status === "Resolved";
   const expired = !!review.content_expired;
   const canPublish =
@@ -232,7 +242,7 @@ export default function ReviewDetail() {
           <span className="text-sm font-medium text-foreground">{review.reviewer_name || "Unknown reviewer"}</span>
           <span className="text-xs text-muted-foreground">
             {providerMeta.label}
-            {review.is_demo ? " · Demo review data" : ""}
+            {review.is_demo ? " · Demo review data" : locationLabel ? ` · ${locationLabel}` : ""}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -300,6 +310,11 @@ export default function ReviewDetail() {
               <div className="bg-emerald-50/60 border border-emerald-100 rounded-lg p-3 text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                 {review.owner_response}
               </div>
+              <p className="text-xs text-muted-foreground mt-2 flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                Relay considers this existing response when determining whether another public response is needed. An
+                existing response does not by itself mean the underlying issue is resolved.
+              </p>
             </div>
           )}
         </div>
@@ -311,7 +326,7 @@ export default function ReviewDetail() {
           <div className="flex items-start gap-2.5">
             <Lightbulb className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
             <div>
-              <h2 className="text-sm font-semibold text-foreground mb-1">Why Relay flagged this</h2>
+              <h2 className="text-sm font-semibold text-foreground mb-1">Why this matters</h2>
               <p className="text-sm text-muted-foreground leading-relaxed">{review.why_flagged}</p>
             </div>
           </div>
@@ -368,7 +383,12 @@ export default function ReviewDetail() {
               </Button>
             )}
             {!editing && !expired && (
-              <Button variant="ghost" size="sm" onClick={handleReanalyze} disabled={actionLoading}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => (review.draft_edited ? setReanalyzeOpen(true) : handleReanalyze())}
+                disabled={actionLoading}
+              >
                 <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Re-analyze
               </Button>
             )}
@@ -480,11 +500,11 @@ export default function ReviewDetail() {
       <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{review.is_demo ? "Publish response (demo)" : "Publish response to Google"}</DialogTitle>
+            <DialogTitle>{review.is_demo ? "Publish response (demo)" : `Publish response to ${providerMeta.label}`}</DialogTitle>
             <DialogDescription>
               {review.is_demo
                 ? "This is demo review data. The response will be recorded in Relay's activity history only — no live connection is contacted."
-                : "Your response will be posted publicly under this review. Relay never publishes without your explicit approval."}
+                : `Your response will be published publicly to ${providerMeta.label} under this review. Relay never publishes without your explicit approval.`}
             </DialogDescription>
           </DialogHeader>
           <div className="bg-secondary/40 rounded-lg p-3 text-sm text-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
@@ -496,6 +516,34 @@ export default function ReviewDetail() {
             </Button>
             <Button onClick={handlePublish} disabled={actionLoading}>
               {review.is_demo ? "Publish (demo)" : "Publish response"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Re-analysis confirmation — never overwrite a manager-edited draft silently */}
+      <Dialog open={reanalyzeOpen} onOpenChange={setReanalyzeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Re-analyze this review?</DialogTitle>
+            <DialogDescription>
+              Re-analysis uses the current Restaurant Profile and this review's current state. Your edited draft will be
+              preserved — a newly generated draft will not replace it. The event is recorded in this review's Activity
+              History.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReanalyzeOpen(false)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setReanalyzeOpen(false);
+                handleReanalyze();
+              }}
+              disabled={actionLoading}
+            >
+              Re-analyze
             </Button>
           </DialogFooter>
         </DialogContent>

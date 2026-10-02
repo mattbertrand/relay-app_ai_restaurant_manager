@@ -105,6 +105,10 @@ export default function Reviews() {
     );
   }
 
+  const sourceLabelById = {};
+  sources.forEach((s) => {
+    sourceLabelById[s.id] = s.provider_location_name || (PROVIDER_META[s.provider] ? PROVIDER_META[s.provider].label : s.provider);
+  });
   const googleSource = sources.find((s) => s.provider === "google");
   const demoSource = sources.find((s) => s.provider === "demo");
   const demoReviewCount = reviews.filter((r) => r.is_demo).length;
@@ -196,7 +200,14 @@ export default function Reviews() {
       ) : (
         <div className="space-y-3">
           {filtered.map((r) => (
-            <ReviewCard key={r.id} review={r} />
+            <ReviewCard
+              key={r.id}
+              review={r}
+              sourceLabel={
+                sourceLabelById[r.review_source_id] ||
+                (r.is_demo ? "Demo review data" : PROVIDER_META[r.provider] ? PROVIDER_META[r.provider].label : r.provider)
+              }
+            />
           ))}
         </div>
       )}

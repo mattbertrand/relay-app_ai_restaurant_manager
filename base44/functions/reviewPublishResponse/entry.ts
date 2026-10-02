@@ -71,6 +71,14 @@ export default async function(req) {
     }
 
     if (review.provider === 'google') {
+      // Publishing to a live provider always requires an explicit confirmation
+      // flag — the UI's confirmation dialog is the only caller that passes it.
+      if (payload.confirm !== true) {
+        return Response.json(
+          { error: 'Publishing a public response requires explicit confirmation.' },
+          { status: 400 }
+        );
+      }
       const connection = await getGoogleConnection(base44);
       if (!connection.connected) {
         await base44.entities.Review.update(review.id, {

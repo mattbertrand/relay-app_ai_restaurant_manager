@@ -110,6 +110,24 @@ export default async function(req) {
   }
 }
 
+// When an owner response newly appears at the provider on an already-imported
+// review, Relay records it and treats a prepared (never-posted) draft as
+// superseded — another public response may not be necessary. The manager's
+// edited draft and any published response are never touched, and this says
+// nothing about whether the underlying issue is resolved.
+async function recordOwnerResponseArrival(base44, restaurantId, found, patch, isDemo) {
+  if (!patch.owner_response || found.draft_edited || found.response_status === "published") return;
+  if (found.response_status === "draft_ready") patch.response_status = "no_response_needed";
+  await base44.entities.Activity.create({
+    restaurant_id: restaurantId,
+    review_id: found.id,
+    type: "review_owner_response",
+    description:
+      "An owner response now exists at the provider — Relay will consider it when determining whether another public response is needed. This does not by itself mean the underlying issue is resolved.",
+    is_demo: isDemo,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Demo provider — clearly labeled sample data, never presented as live.
 // ---------------------------------------------------------------------------
@@ -140,6 +158,7 @@ async function syncDemoSource(base44, source, ctx) {
         if ((d.owner_response || "") !== (found.owner_response || "")) {
           patch.owner_response = d.owner_response;
           patch.owner_response_at = d.owner_response_at;
+          await recordOwnerResponseArrival(base44, source.restaurant_id, found, patch, true);
         }
         await base44.entities.Review.update(found.id, patch);
         continue;
@@ -249,6 +268,7 @@ async function syncGoogleSource(base44, source, ctx) {
           if ((normalized.owner_response || "") !== (found.owner_response || "")) {
             patch.owner_response = normalized.owner_response;
             patch.owner_response_at = normalized.owner_response_at;
+            await recordOwnerResponseArrival(base44, source.restaurant_id, found, patch, false);
           }
           await base44.entities.Review.update(found.id, patch);
           continue;

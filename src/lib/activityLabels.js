@@ -24,6 +24,7 @@ export const ACTIVITY_LABELS = {
   review_reviewed: "Manager picked this up",
   review_resolved: "Review marked Resolved",
   review_reopened: "Review reopened",
+  review_owner_response: "Owner response detected",
   review_response_published: "Response published",
   review_response_publish_failed: "Response publication failed",
 };

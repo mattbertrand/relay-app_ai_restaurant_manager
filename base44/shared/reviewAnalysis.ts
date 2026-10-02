@@ -3,6 +3,7 @@
 // clearly separated. Used by the review sync and by re-analysis.
 
 import { loadKnowledge, loadRecentFeedback, formatKnowledgeForPrompt } from "./restaurantKnowledge.ts";
+import { providerFor } from "./reviewProviders.ts";
 
 const REVIEW_SCHEMA = {
   type: "object",
@@ -44,7 +45,7 @@ const REVIEW_SCHEMA = {
     why_flagged: {
       type: "string",
       description:
-        "1-2 sentences of concrete evidence from the review explaining why this needs manager attention (or why it does not). Never mention AI, models, or technology. Never invent facts.",
+        "1-2 sentences of concrete evidence from the review, in neutral factual terms: for reviews needing attention, why it matters; for reviews that do not, why no action is needed. Never frame a non-issue as a problem. Never mention AI, models, or technology. Never invent facts.",
     },
     knowledge_used: {
       type: "string",
@@ -99,12 +100,15 @@ VERIFIED RESTAURANT PROFILE
 (None provided yet. You must NOT invent any restaurant facts — hours, policies, procedures, none of it. If judging this review needs a restaurant-specific fact the profile lacks, say so plainly in knowledge_used and never state the fact as known.)`;
 
   const tz = options.timezone || "";
+  const providerLabel = providerFor(review.provider)
+    ? providerFor(review.provider).label
+    : review.provider || "the provider";
   const ownerBlock = review.owner_response
     ? `
 
 EXISTING PUBLIC OWNER RESPONSE (already posted at the provider):
 "${String(review.owner_response).slice(0, 800)}"
-An owner response already exists. Ordinarily this review needs no further public response — classify it routine (or informational priority) unless the review's content still reveals a serious unresolved issue the manager must act on internally.`
+An owner response already exists — Relay considers it when determining whether another public response is needed. Ordinarily this review needs no further public response (needs_response false). An existing response NEVER by itself means the underlying issue is resolved: judge the internal follow-up need independently of the response. If the review still reveals a serious unresolved issue the manager must act on internally, classify it accordingly (opportunity or attention) even though no new public response is drafted.`
     : "";
 
   const prompt = `You are reviewing one customer review for "${restaurantName}", a restaurant. Relay's promise to the restaurant is: "Never let another customer opportunity fall through the cracks." Your job is to understand what actually happened in this review and decide how much of the manager's attention it deserves.
@@ -116,7 +120,7 @@ THREE SOURCES OF INFORMATION — keep them strictly separate:
 
 ${knowledgeBlock}${ownerBlock}
 
-REVIEW (provider: Google Business Profile)
+REVIEW (provider: ${providerLabel}${review.is_demo ? " — DEMO DATA, not a live provider" : ""})
 Reviewer: ${review.reviewer_name || "Unknown"}
 Star rating: ${review.rating || "not stated"} out of 5
 Posted: ${review.review_created_at || "unknown"}
@@ -137,7 +141,7 @@ PRIORITY — judge the CONTENT, never the star rating alone. A 3-star review tha
 - low: minor complaints.
 - informational: positive reviews, compliments, or anything requiring no action.
 
-WHY FLAGGED: cite the review's actual evidence (e.g. "The reviewer reports a 45-minute wait before receiving service — a customer-service issue that may warrant manager follow-up."). No generic language, no invented details, no mention of AI or technology.
+WHY THIS MATTERS: cite the review's actual evidence in neutral, factual terms (e.g. "The reviewer reports a 45-minute wait before receiving service — a customer-service issue that may warrant manager follow-up."). For reviews that do not need attention, explain plainly why no action is needed (e.g. "A positive review of the pasta special — no issue raised; no action needed."). Never frame a non-issue as a problem. No generic language, no invented details, no mention of AI or technology.
 
 KNOWLEDGE USED: only verified profile facts that actually applied, or a plain statement that the profile lacks them. Examples of profile influence: an allergy/safety policy ("Allergen complaints must be escalated to a manager"), a service-recovery policy, large-party booking process, operating procedures.
 
