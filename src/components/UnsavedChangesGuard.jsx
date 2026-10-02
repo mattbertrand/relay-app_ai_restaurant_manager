@@ -177,7 +177,7 @@ export default function UnsavedChangesGuard() {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Unsaved changes</DialogTitle>
           <DialogDescription>
@@ -186,7 +186,7 @@ export default function UnsavedChangesGuard() {
               : "You have unsaved changes. What would you like to do?"}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="flex flex-wrap gap-2">
+        <DialogFooter className="sm:space-x-2 gap-2">
           <Button variant="outline" onClick={close} disabled={saving}>
             Stay
           </Button>
