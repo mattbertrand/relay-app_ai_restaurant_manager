@@ -186,7 +186,7 @@ export default function UnsavedChangesGuard() {
               : "You have unsaved changes. What would you like to do?"}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="sm:space-x-2 gap-2">
+        <DialogFooter className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={close} disabled={saving}>
             Stay
           </Button>

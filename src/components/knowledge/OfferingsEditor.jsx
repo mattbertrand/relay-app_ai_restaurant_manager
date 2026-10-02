@@ -68,11 +68,19 @@ export default function OfferingsEditor({ value, onChange }) {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Starts</Label>
-              <TimePicker value={h.start_time || ""} onChange={(v) => setHappy({ start_time: v })} />
+              <TimePicker
+                value={h.start_time || ""}
+                onChange={(v) => setHappy({ start_time: v })}
+                className="[&_select[aria-label='Hour']]:min-w-16 [&_select[aria-label='Hour']]:pl-3 [&_select[aria-label='Hour']]:pr-8"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Ends</Label>
-              <TimePicker value={h.end_time || ""} onChange={(v) => setHappy({ end_time: v })} />
+              <TimePicker
+                value={h.end_time || ""}
+                onChange={(v) => setHappy({ end_time: v })}
+                className="[&_select[aria-label='Hour']]:min-w-16 [&_select[aria-label='Hour']]:pl-3 [&_select[aria-label='Hour']]:pr-8"
+              />
             </div>
           </div>
         </div>
