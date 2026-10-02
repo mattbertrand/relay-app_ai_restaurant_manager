@@ -218,8 +218,18 @@ export default function ReviewDetail() {
     );
   }
 
+  // A demo source may simulate a live provider (e.g. Google Business Profile
+  // — Demo). It is always labeled as demo, never as a live connection.
   const providerMeta = PROVIDER_META[review.provider] || { label: review.provider };
-  const locationLabel = !review.is_demo && source && source.provider_location_name ? source.provider_location_name : null;
+  const demoSimLabel =
+    source && source.is_demo && source.demo_of_provider && PROVIDER_META[source.demo_of_provider]
+      ? `${PROVIDER_META[source.demo_of_provider].label} — Demo`
+      : null;
+  const headerLabel = demoSimLabel || providerMeta.label;
+  const locationLabel =
+    source && source.provider_location_name && source.provider_location_name !== "Demo review data"
+      ? source.provider_location_name
+      : null;
   const isResolved = review.manager_status === "Resolved";
   const expired = !!review.content_expired;
   const canPublish =
@@ -241,8 +251,8 @@ export default function ReviewDetail() {
           <Stars rating={review.rating} />
           <span className="text-sm font-medium text-foreground">{review.reviewer_name || "Unknown reviewer"}</span>
           <span className="text-xs text-muted-foreground">
-            {providerMeta.label}
-            {review.is_demo ? " · Demo review data" : locationLabel ? ` · ${locationLabel}` : ""}
+            {headerLabel}
+            {locationLabel || review.is_demo ? ` · ${locationLabel || "Demo review data"}` : ""}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap mb-2">

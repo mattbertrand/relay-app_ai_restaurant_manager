@@ -10,6 +10,10 @@
       "type": "string",
       "description": "Provider identifier, e.g. 'google', 'demo'. Future: 'yelp', 'tripadvisor', 'facebook'."
     },
+    "demo_of_provider": {
+      "type": "string",
+      "description": "For demo sources only: the live provider this source simulates (e.g. 'google'). Always labeled as demo \u2014 never presented as a live connection."
+    },
     "provider_account_id": {
       "type": "string",
       "description": "The account identifier at the provider (e.g. Google Business Profile account name)."

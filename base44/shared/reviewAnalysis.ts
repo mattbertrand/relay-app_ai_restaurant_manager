@@ -100,9 +100,8 @@ VERIFIED RESTAURANT PROFILE
 (None provided yet. You must NOT invent any restaurant facts — hours, policies, procedures, none of it. If judging this review needs a restaurant-specific fact the profile lacks, say so plainly in knowledge_used and never state the fact as known.)`;
 
   const tz = options.timezone || "";
-  const providerLabel = providerFor(review.provider)
-    ? providerFor(review.provider).label
-    : review.provider || "the provider";
+  const providerLabel = options.providerLabel
+    || (providerFor(review.provider) ? providerFor(review.provider).label : review.provider || "the provider");
   const ownerBlock = review.owner_response
     ? `
 
@@ -134,6 +133,12 @@ CLASSIFICATION (choose exactly one)
 - spam: promotional content, irrelevant advertising, review-bait, or content unrelated to the restaurant.
 
 IMPORTANT on classification: do NOT force every review into opportunity. A 5-star compliment is attention/informational at most. A review the owner already answered well is routine. Spam is spam.
+
+NO-TEXT REVIEWS: if the review has no text (a star rating with no comment, or "no comment"), do NOT invent reasons why the customer was satisfied or dissatisfied. Judge from the rating and context alone, say plainly in why_flagged that the review contains no text, keep confidence Low, and typically classify it routine with informational priority and needs_response false.
+
+OUTDATED REVIEW INFORMATION: if the review states something that conflicts with the VERIFIED RESTAURANT PROFILE (e.g. an old policy, menu item, or hours), treat the profile as current, treat the review's statement as possibly outdated customer-provided information, and note the conflict in why_flagged or knowledge_used. Never repeat an outdated review statement as current fact.
+
+UNCERTAIN CLAIMS: if the reviewer themselves expresses uncertainty (e.g. "I think my burger was more rare than medium but that could be my misunderstanding"), preserve their uncertainty — never state as fact that the restaurant made the error.
 
 PRIORITY — judge the CONTENT, never the star rating alone. A 3-star review that identifies a serious operational issue outranks a 1-star rant with no specifics.
 - high: safety or allergen incidents, severe service failures, repeated issues, or anything seriously damaging if unresolved.

@@ -70,10 +70,15 @@ export default async function(req) {
       // Explicit demo request (e.g. "Load demo reviews" in the UI) creates the
       // demo source on first use. Demo records are unmistakably labeled.
       if (payload.provider === 'demo' && !sources.some((s) => s.provider === 'demo')) {
+        const isHopMonk = /hopmonk/i.test(restaurantName);
         const created = await base44.entities.ReviewSource.create({
           restaurant_id: restaurantId,
           provider: 'demo',
-          provider_location_name: 'Demo review data',
+          // For HopMonk Tavern Novato the demo source simulates its Google
+          // Business Profile (Novato location) — clearly labeled as demo.
+          provider_location_name: isHopMonk ? 'Novato' : 'Demo review data',
+          provider_account_name: isHopMonk ? restaurantName : '',
+          demo_of_provider: isHopMonk ? 'google' : '',
           connection_status: 'connected',
           connected_at: new Date().toISOString(),
           sync_status: 'idle',
@@ -138,6 +143,9 @@ async function syncDemoSource(base44, source, ctx) {
     sync_status: 'in_progress',
     error_message: '',
   });
+  const demoLabel = source.demo_of_provider === 'google'
+    ? 'Google Business Profile — Demo'
+    : 'Demo review data';
   const result = { source_id: source.id, provider: 'demo', connected: true, newReviews: 0, analyzed: 0, flagged: 0, draftsCreated: 0, error: null };
   try {
     const existing = await base44.entities.Review.filter(
@@ -149,7 +157,7 @@ async function syncDemoSource(base44, source, ctx) {
     existing.forEach((r) => { if (r.external_review_id) byExternal[r.external_review_id] = r; });
 
     const newRecords = [];
-    for (const d of buildDemoReviews()) {
+    for (const d of buildDemoReviews(ctx.restaurantName)) {
       const found = byExternal[d.external_review_id];
       if (found) {
         // Re-sync refreshes provider-controlled fields (e.g. an owner response
@@ -190,13 +198,21 @@ async function syncDemoSource(base44, source, ctx) {
         restaurant_id: source.restaurant_id,
         review_id: created.id,
         type: 'review_received',
-        description: `Review received: ${d.rating}★ from ${d.reviewer_name} (Demo review data)`,
+        description: `Review received: ${d.rating}★ from ${d.reviewer_name} (${demoLabel})`,
         is_demo: true,
       });
       result.newReviews++;
     }
 
-    const analysis = await analyzeNewReviews(base44, newRecords, ctx, true);
+    // Bounded batch — also picks up anything left unanalyzed by an earlier run.
+    const analyzedIds = new Set(newRecords.map((r) => r.id));
+    const unanalyzed = await base44.entities.Review.filter(
+      { restaurant_id: source.restaurant_id, provider: 'demo', $or: [{ last_analyzed_at: { $exists: false } }, { last_analyzed_at: null }] },
+      null,
+      20
+    );
+    const analysisTargets = newRecords.concat(unanalyzed.filter((r) => !analyzedIds.has(r.id)));
+    const analysis = await analyzeNewReviews(base44, analysisTargets, ctx, true, demoLabel);
     result.analyzed = analysis.analyzed;
     result.flagged = analysis.flagged;
     result.draftsCreated = analysis.draftsCreated;
@@ -309,7 +325,15 @@ async function syncGoogleSource(base44, source, ctx) {
       hasMore = !!pageToken;
     }
 
-    const analysis = await analyzeNewReviews(base44, newRecords, ctx, false);
+    // Bounded batch — also picks up anything left unanalyzed by an earlier run.
+    const analyzedIds = new Set(newRecords.map((r) => r.id));
+    const unanalyzed = await base44.entities.Review.filter(
+      { restaurant_id: source.restaurant_id, provider: 'google', content_expired: { $ne: true }, $or: [{ last_analyzed_at: { $exists: false } }, { last_analyzed_at: null }] },
+      null,
+      20
+    );
+    const analysisTargets = newRecords.concat(unanalyzed.filter((r) => !analyzedIds.has(r.id)));
+    const analysis = await analyzeNewReviews(base44, analysisTargets, ctx, false, 'Google Business Profile');
     result.analyzed = analysis.analyzed;
     result.flagged = analysis.flagged;
     result.draftsCreated = analysis.draftsCreated;
@@ -338,7 +362,7 @@ async function syncGoogleSource(base44, source, ctx) {
 
 // Analyzes newly imported reviews (bounded batch) and updates Relay's
 // attention state + activity history. Never publishes anything.
-async function analyzeNewReviews(base44, newRecords, ctx, isDemo) {
+async function analyzeNewReviews(base44, newRecords, ctx, isDemo, providerLabel) {
   const out = { analyzed: 0, flagged: 0, draftsCreated: 0, classifications: [] };
   for (const review of newRecords.slice(0, MAX_ANALYZE_PER_RUN)) {
     out.analyzed++;
@@ -347,6 +371,7 @@ async function analyzeNewReviews(base44, newRecords, ctx, isDemo) {
       analysis = await classifyReview(base44, ctx.restaurantName, review, {
         knowledgeContext: ctx.knowledgeContext,
         timezone: ctx.timezone,
+        providerLabel,
       });
     } catch (e) {
       // Analysis failed — keep the review visible and say so plainly.

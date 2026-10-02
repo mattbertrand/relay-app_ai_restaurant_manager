@@ -23,3 +23,19 @@ export const PROVIDER_META = {
 };
 
 export const UPCOMING_PROVIDERS = ["yelp", "tripadvisor", "facebook"];
+
+// A demo source may simulate a live provider (demo_of_provider, e.g.
+// "google"). It must always be labeled as demo and never shown as a live
+// connection — the label reads "Google Business Profile — Demo".
+export function sourceMetaFor(source) {
+  if (source && source.is_demo && source.demo_of_provider && PROVIDER_META[source.demo_of_provider]) {
+    const base = PROVIDER_META[source.demo_of_provider];
+    return {
+      ...base,
+      label: `${base.label} — Demo`,
+      description: "Simulated for Relay demonstration — not a live connection.",
+      isDemo: true,
+    };
+  }
+  return source && PROVIDER_META[source.provider] ? PROVIDER_META[source.provider] : PROVIDER_META.demo;
+}

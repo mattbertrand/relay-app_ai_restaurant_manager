@@ -71,6 +71,40 @@ export function timeAgo(dateStr) {
   return formatDate(dateStr);
 }
 
+// 12-hour US display for a stored "HH:mm" time (e.g. "18:00" → "6:00 PM").
+// Presentation only — stored values are never changed.
+export function formatTime12(value) {
+  if (!value) return "";
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(value).trim());
+  if (!m) return value;
+  let h = parseInt(m[1], 10);
+  const period = h >= 12 && h < 24 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m[2]} ${period}`;
+}
+
+// Converts 24-hour "HH:mm" tokens inside free text (e.g. "18:00–22:00") to
+// 12-hour display ("6:00 PM–10:00 PM"). Display only.
+export function normalizeTimeRangeText(text) {
+  if (!text) return "";
+  return String(text).replace(/(\d{1,2}):(\d{2})/g, (match, h, min) => {
+    const hour = parseInt(h, 10);
+    if (hour < 13) return match;
+    return formatTime12(`${hour}:${min}`);
+  });
+}
+
+// Today's date (YYYY-MM-DD) in the restaurant's configured timezone — used
+// to distinguish upcoming from past special hours.
+export function todayInTimezone() {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: activeTimezone || undefined }).format(new Date());
+  } catch (e) {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
 export function getRestaurantId(user) {
   if (!user) return null;
   return user.restaurant_id || user.data?.restaurant_id || null;

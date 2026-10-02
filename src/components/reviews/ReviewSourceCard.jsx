@@ -37,6 +37,11 @@ export default function ReviewSourceCard({ meta, source, onAction, busy, note, r
         <>
           {source && connected && (
             <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+              {source.provider_account_name && (
+                <p>
+                  Business: <span className="text-foreground">{source.provider_account_name}</span>
+                </p>
+              )}
               {source.provider_location_name && (
                 <p>
                   Location: <span className="text-foreground">{source.provider_location_name}</span>

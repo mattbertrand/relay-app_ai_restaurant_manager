@@ -8,7 +8,7 @@ import DemoBanner from "@/components/DemoBanner";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { RefreshCw, Star } from "lucide-react";
-import { PROVIDER_META, UPCOMING_PROVIDERS } from "@/lib/reviewProviders";
+import { PROVIDER_META, UPCOMING_PROVIDERS, sourceMetaFor } from "@/lib/reviewProviders";
 import { cn } from "@/lib/utils";
 
 const FILTERS = [
@@ -107,7 +107,12 @@ export default function Reviews() {
 
   const sourceLabelById = {};
   sources.forEach((s) => {
-    sourceLabelById[s.id] = s.provider_location_name || (PROVIDER_META[s.provider] ? PROVIDER_META[s.provider].label : s.provider);
+    const meta = sourceMetaFor(s);
+    const loc =
+      s.provider_location_name && s.provider_location_name !== "Demo review data"
+        ? s.provider_location_name
+        : null;
+    sourceLabelById[s.id] = loc ? `${meta.label} · ${loc}` : meta.label;
   });
   const googleSource = sources.find((s) => s.provider === "google");
   const demoSource = sources.find((s) => s.provider === "demo");
@@ -144,7 +149,7 @@ export default function Reviews() {
           note="Google Business Profile API access isn't configured yet — the connect button activates once Google OAuth is available."
         />
         <ReviewSourceCard
-          meta={PROVIDER_META.demo}
+          meta={demoSource ? sourceMetaFor(demoSource) : PROVIDER_META.demo}
           source={demoSource}
           onAction={() => runSync("demo")}
           busy={syncing}
