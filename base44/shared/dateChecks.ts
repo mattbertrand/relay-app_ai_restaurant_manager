@@ -158,5 +158,19 @@ export function detectDateIssue(text, todayISO) {
     }
   }
 
+  // D. Ambiguous date — a bare day of the month with no month or year
+  // ("Friday the 23rd", "can we book the 15th"). The intended date cannot be
+  // determined, so it is never silently resolved to the nearest matching
+  // month; the draft must ask the sender to confirm the exact date.
+  const bareDay = /\bthe\s+(\d{1,2})(?:st|nd|rd|th)(?!\s+of\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec))/gi;
+  for (const m of lower.matchAll(bareDay)) {
+    const day = parseInt(m[1], 10);
+    if (day < 1 || day > 31) continue;
+    return {
+      issue: "ambiguous_date",
+      detail: `The message mentions a day of the month ("${m[0].trim()}") without a month or year — the intended date cannot be determined. Do not choose a month; the draft must ask the sender to confirm the exact month and date they meant.`,
+    };
+  }
+
   return { issue: "none", detail: "" };
 }
