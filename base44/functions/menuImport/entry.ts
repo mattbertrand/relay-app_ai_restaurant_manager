@@ -122,7 +122,15 @@ export default async function (req) {
 
     const items = normalizeItems(rawItems);
     if (!items.length) {
-      return Response.json({ error: 'No menu items could be identified from that source. Try uploading the menu file directly.' });
+      // A page with readable text but no extractable menu items usually means
+      // the menu itself is published as images — say so plainly instead of a
+      // generic "nothing identified" message.
+      return Response.json({
+        error:
+          source === "website"
+            ? "This menu appears to be published as images rather than text. Try uploading the menu image or PDF instead."
+            : "No menu items could be identified from that source. Try uploading the menu file directly.",
+      });
     }
 
     // Replace this source's unedited items; keep manual items and anything

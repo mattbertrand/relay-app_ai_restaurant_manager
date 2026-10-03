@@ -82,20 +82,9 @@ export default function OpportunityDetail() {
       setLinkedConversations(convos || []);
       setActivities(await fetchActivities(convos || []));
 
-      // Opening a New opportunity counts as the manager reviewing it — the
-      // lifecycle moves to In Progress, never to Resolved.
-      if (NEW_STATUSES.includes(o.status)) {
-        await base44.entities.Opportunity.update(id, { status: "In Progress" });
-        await base44.entities.Activity.create({
-          restaurant_id: o.restaurant_id,
-          opportunity_id: id,
-          conversation_id: (convos || [])[0]?.id || "",
-          type: "opportunity_reviewed",
-          description: `Opportunity reviewed: ${o.title}`,
-        });
-        setOpp({ ...o, status: "In Progress" });
-        setActivities(await fetchActivities(convos || []));
-      }
+      // Viewing an opportunity is NOT a manager action — the lifecycle only
+      // moves New → In Progress through an explicit manager action (editing or
+      // approving a draft), recorded in the Activity History.
     } catch (err) {
       console.error(err);
     } finally {
@@ -124,9 +113,14 @@ export default function OpportunityDetail() {
     if (actionLoading) return false;
     setActionLoading(true);
     try {
+      // Editing and saving a draft is an explicit manager action — it moves a
+      // New opportunity to In Progress, and the transition is recorded in the
+      // Activity History so every status change is attributable.
+      const statusUpdate = NEW_STATUSES.includes(opp.status) ? { status: "In Progress" } : {};
       await base44.entities.Opportunity.update(id, {
         draft_response: draft,
         draft_status: "Edited",
+        ...statusUpdate,
       });
       await base44.entities.Activity.create({
         restaurant_id: opp.restaurant_id,
@@ -134,7 +128,15 @@ export default function OpportunityDetail() {
         type: "draft_edited",
         description: `Draft response edited for ${opp.customer_name}'s ${typeLabel}`,
       });
-      setOpp({ ...opp, draft_response: draft, draft_status: "Edited" });
+      if (statusUpdate.status) {
+        await base44.entities.Activity.create({
+          restaurant_id: opp.restaurant_id,
+          opportunity_id: id,
+          type: "status_changed",
+          description: "Opportunity moved to In Progress — draft response edited",
+        });
+      }
+      setOpp({ ...opp, draft_response: draft, draft_status: "Edited", ...statusUpdate });
       setEditing(false);
       setDraftUpdated(true);
       return true;

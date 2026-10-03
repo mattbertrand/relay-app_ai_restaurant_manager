@@ -18,6 +18,7 @@ export const ACTIVITY_LABELS = {
   message_reviewed: "Message re-reviewed",
   reply_recorded: "Reply recorded",
   moved_to_new: "Moved back to New",
+  status_changed: "Status changed",
   archived: "Archived",
   review_received: "Review received",
   review_analyzed: "Review analyzed",

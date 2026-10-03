@@ -65,20 +65,8 @@ export default function ReviewDetail() {
         }
       }
       setActivities(await base44.entities.Activity.filter({ review_id: id }, "-created_date", 50));
-      // Opening a New review counts as the manager picking it up — attention
-      // moves to In Progress, never to Resolved.
-      if (r.manager_status === "New") {
-        await base44.entities.Review.update(id, { manager_status: "In Progress" });
-        await base44.entities.Activity.create({
-          restaurant_id: r.restaurant_id,
-          review_id: id,
-          type: "review_reviewed",
-          description: "Manager picked this review up for handling.",
-          is_demo: r.is_demo,
-        });
-        setReview({ ...r, manager_status: "In Progress" });
-        setActivities(await base44.entities.Activity.filter({ review_id: id }, "-created_date", 50));
-      }
+      // Viewing a review is NOT a manager action — the manager moves it to
+      // In Progress explicitly, with the status control below.
     } catch (err) {
       console.error(err);
       setReview(null);

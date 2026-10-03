@@ -2,6 +2,7 @@
 // Keeps Relay's classification rules in one place.
 
 import { detectDateIssue } from "./dateChecks.ts";
+import { ensureSingleSignature } from "./signature.ts";
 
 const ANALYSIS_SCHEMA = {
   type: "object",
@@ -306,6 +307,11 @@ Return JSON only.`;
   // and weekday mismatches — enforce the field even if the model missed it.
   if (dateCheck.issue !== "none" && result && result.date_issue !== dateCheck.issue) {
     result.date_issue = dateCheck.issue;
+  }
+  // Signature safety: every generated draft carries exactly one signature
+  // block — never a second copy appended to a draft that already had one.
+  if (result && result.draft_response) {
+    result.draft_response = ensureSingleSignature(result.draft_response, options.signature);
   }
   return result;
 }

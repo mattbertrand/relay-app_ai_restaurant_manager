@@ -59,6 +59,28 @@ export function isManagerControlled({ convo, opportunity }) {
   );
 }
 
+// Idempotency guard: a retried re-analysis must not create duplicate history
+// entries — skip when an identical entry for this conversation already exists
+// from the last few minutes (a genuine retry, not a new manager action).
+async function createActivityOnce(base44, entry) {
+  try {
+    const recentCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const existing = await base44.entities.Activity.filter(
+      {
+        conversation_id: entry.conversation_id || "",
+        type: entry.type,
+        description: entry.description,
+      },
+      null,
+      1
+    );
+    if (existing.length && existing[0].created_date > recentCutoff) return;
+  } catch (e) {
+    // If the dedupe check fails, still record the entry — history stays complete.
+  }
+  await base44.entities.Activity.create(entry);
+}
+
 export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo, messages, confirm, reclassChoice }) {
   if (!convo.analysis_status || convo.analysis_status === "Not analyzed") {
     return { error: "This message has not been analyzed yet." };
@@ -153,6 +175,20 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
       previous_analysis: snapshot,
       last_analyzed_at: now,
     };
+    // Idempotency: a retried request can race with the conversation update at
+    // the end of the previous run — re-read the conversation so an opportunity
+    // already linked by an earlier run is reused instead of duplicated.
+    if (!opportunity) {
+      try {
+        const freshConvo = await base44.entities.Conversation.get(convo.id);
+        const freshOppId = (freshConvo && freshConvo.opportunity_id) || "";
+        if (freshOppId && freshOppId !== convo.opportunity_id) {
+          opportunity = await base44.entities.Opportunity.get(freshOppId);
+        }
+      } catch (e) {
+        // No freshly linked opportunity — proceed with creation.
+      }
+    }
     if (opportunity) {
       await base44.entities.Opportunity.update(opportunity.id, fields);
       summary.opportunityUpdated = true;
@@ -229,7 +265,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
           pending.map((a) => ({ id: a.id, status: "Dismissed" }))
         );
       }
-      await base44.entities.Activity.create({
+      await createActivityOnce(base44, {
         restaurant_id: restaurantId,
         opportunity_id: opportunity.id,
         conversation_id: convo.id,
@@ -251,7 +287,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
         last_analyzed_at: now,
       };
       await base44.entities.Opportunity.update(opportunity.id, refreshed);
-      await base44.entities.Activity.create({
+      await createActivityOnce(base44, {
         restaurant_id: restaurantId,
         opportunity_id: opportunity.id,
         conversation_id: convo.id,
@@ -280,7 +316,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
   if (classificationBefore !== summary.classificationAfter) {
     suffixes.push(`classification changed from ${classificationBefore} to ${summary.classificationAfter}`);
   }
-  await base44.entities.Activity.create({
+  await createActivityOnce(base44, {
     restaurant_id: restaurantId,
     opportunity_id: oppId || "",
     conversation_id: convo.id,

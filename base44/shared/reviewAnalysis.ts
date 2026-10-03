@@ -4,6 +4,7 @@
 
 import { loadKnowledge, loadRecentFeedback, formatKnowledgeForPrompt } from "./restaurantKnowledge.ts";
 import { providerFor } from "./reviewProviders.ts";
+import { ensureSingleSignature } from "./signature.ts";
 
 const REVIEW_SCHEMA = {
   type: "object",
@@ -179,6 +180,11 @@ Return JSON only.`;
     prompt,
     response_json_schema: REVIEW_SCHEMA,
   });
+  // Signature safety: exactly one public signature block per generated
+  // response — never a second copy appended to a draft that already had one.
+  if (result && result.draft_response) {
+    result.draft_response = ensureSingleSignature(result.draft_response, options.reviewSignature);
+  }
   return result;
 }
 
