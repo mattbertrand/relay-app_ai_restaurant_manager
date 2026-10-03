@@ -25,6 +25,28 @@ export default async function(req) {
       try {
         const restaurant = await base44.entities.Restaurant.get(restaurantId);
         gmailSetup = (restaurant && restaurant.gmail_setup) || null;
+
+        // An account connected before the initial-import setup existed may
+        // already have imported email through normal syncing. The setup
+        // questions are a first-connection step only — once this restaurant
+        // has Gmail messages on record, the setup is marked complete here so
+        // it is never asked again.
+        if (!gmailSetup || !gmailSetup.completed_at) {
+          const prior = await base44.entities.Conversation.filter(
+            { restaurant_id: restaurantId, source: 'Gmail' },
+            { limit: 1, fields: ['id'] }
+          );
+          if ((prior.items || prior).length > 0) {
+            gmailSetup = {
+              ...(gmailSetup || {}),
+              window: gmailSetup?.window || 'completed',
+              selected_at: gmailSetup?.selected_at || new Date().toISOString(),
+              completed_at: new Date().toISOString(),
+              prior_import: true,
+            };
+            await base44.entities.Restaurant.update(restaurantId, { gmail_setup: gmailSetup });
+          }
+        }
       } catch (e) { /* setup unknown */ }
     }
 
