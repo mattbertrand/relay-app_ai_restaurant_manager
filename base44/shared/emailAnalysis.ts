@@ -87,7 +87,7 @@ export function opportunityTypeFor(category) {
 // the analysis prompt change. Every analyzed conversation is stamped with it,
 // so re-analysis runs skip messages already classified by the current rules
 // and only pick up stale ones (idempotent — no repeated activity noise).
-export const ANALYSIS_VERSION = 5;
+export const ANALYSIS_VERSION = 6;
 
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
@@ -191,17 +191,30 @@ RULES FOR ADMINISTRATION CONTEXT:
 
 DETECTED DATE CONFLICT (computed by Relay from the calendar — authoritative; the sender's intended date is UNKNOWN):
 - ${dateCheck.detail}
-Set date_issue to "${dateCheck.issue}", report this conflict before anything else in why_flagged, and make the clarification request the first thing in draft_response (e.g. "Just to confirm, September 30 falls on a Wednesday rather than Tuesday — could you confirm which date you were looking for?"). Never invent or silently correct the sender's intended date.`
+Set date_issue to "${dateCheck.issue}", report this conflict before anything else in why_flagged, and make the clarification request the first thing in draft_response (e.g. "Just to confirm, September 30 falls on a Wednesday rather than Tuesday — could you confirm which date you were looking for?"). Never invent or silently correct the sender's intended date.${
+        dateCheck.issue === "ambiguous_date"
+          ? ` This conflict is an ambiguous date (a day of the month with no month or year): the draft's first line must ask which month is intended (e.g. "Just to confirm, which month is your 'Friday the 23rd' reservation for?") — never name a month yourself, and never assume the nearest matching month.`
+          : ""
+      }`
       : "";
   const dateBlock = `
 
 DATE AND WEEKDAY CHECKS (the restaurant's local timezone is ${tz || "not configured"}; today's date there is ${todayInRestaurant}). When the message states a specific date, day of the week, month, or time, check it against the calendar and the verified operating hours before responding — but never overcomplicate a normal request:
 - Impossible date (e.g. "September 31" — September has 30 days): state plainly that the date does not exist. Never invent or substitute a date; ask which date the sender meant.
 - Valid date whose stated weekday is wrong (e.g. "Tuesday the 30th" when the 30th falls on a Wednesday): do NOT decide which part the sender intended — not the weekday, not the date, not the month/year. Name the mismatch exactly ("Just to confirm, September 30 falls on a Wednesday rather than Tuesday — could you confirm which date you were looking for?") and ask for clarification. Never silently correct either part.
-- Ambiguous date ("the 30th" with no month, or a month with no year): if the intended month or year cannot be determined from the message, do not invent it — ask for the full date.
+- Ambiguous date (a day of the month with no month or year, e.g. "Friday the 23rd", or a month with no year): Relay detects a month-less day in code and that detection is authoritative — do not choose or imply a month yourself; ask for the full date.
 - Date or time outside the verified operating hours, or a day the restaurant is closed: name the conflict against the verified hours and reference the verified hours instead — without claiming availability or implying a reservation is possible.
 - A valid date with a matching weekday: proceed normally, with no date commentary.
 This check runs FIRST, before anything else: if the message names a date or weekday that does not match the calendar, date_issue MUST be set (never "none") and the draft MUST ask the sender to confirm which date they meant — even when the message also raises other matters (party size, event type, budget, hours). Report the date mismatch before anything else in why_flagged and in the draft. When one of these applies, set date_issue accordingly and include the clarification request in draft_response; otherwise date_issue is "none".`;
+  // The manager's default email signature — appended to every generated
+  // draft, and still editable on each individual draft before approval.
+  const signatureBlock = options.signature
+    ? `
+
+DRAFT SIGNATURE (provided by the restaurant manager — end the draft with exactly this signature on its own lines at the very end, after a closing such as "Best," or "Warm regards,"):
+${options.signature}`
+    : "";
+
   const correctionsBlock = corrections.length
     ? `
 
@@ -217,7 +230,7 @@ THREE SOURCES OF INFORMATION — keep them strictly separate and never blur them
 1. VERIFIED RESTAURANT INFORMATION (below): facts the manager entered or confirmed. This is authoritative for restaurant-specific facts. Never contradict it. When you use one of these facts, say so (e.g. "The restaurant profile states a maximum standard party size of 10.").
 2. CUSTOMER-PROVIDED INFORMATION: only what the customer actually wrote (e.g. "The customer is asking about a party of 18.").
 3. YOUR INFERENCE: reasoning that combines the two (e.g. "This appears to be a private-event inquiry."). Never present an inference as a verified restaurant fact, and never invent restaurant facts at all.
-${knowledgeBlock}${adminBlock}${correctionsBlock}${dateBlock}${detectedBlock}
+${knowledgeBlock}${adminBlock}${correctionsBlock}${dateBlock}${detectedBlock}${signatureBlock}
 
 EMAIL
 From: ${email.senderName} <${email.senderEmail}>
@@ -280,7 +293,7 @@ HOW TO DECIDE
 8. why_flagged: 1-2 factual sentences combining what the customer asked for, why it matters, and — when one applies — the verified restaurant fact it relates to (e.g. "The restaurant profile states a maximum standard party size of 10."). Never mention AI, models, algorithms, or technology.
 9. knowledge_used: the verified facts from the profile that apply to this message, or a plain statement that the profile does not contain the needed information. Never list facts you inferred or invented.
 10. recommended_action: one specific action tied to the actual message. Empty string when classification is routine or spam.
-11. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT PROFILE — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. For administrative messages, write a short factual draft ONLY when the verified Restaurant Profile (including the administration context) answers the sender's question — e.g. verified application instructions or a known vendor's process — and never confirm an interview, an application status, an order, or a payment the profile does not state; otherwise leave it empty. Empty string when classification is routine or spam.
+11. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Structure it like a short real email: a greeting addressed to the sender by name (e.g. "Hi Dana,"), one to three short body paragraphs separated by blank lines, and a closing line such as "Best," at the end — never one solid block of text. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT PROFILE — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. For administrative messages, write a short factual draft ONLY when the verified Restaurant Profile (including the administration context) answers the sender's question — e.g. verified application instructions or a known vendor's process — and never confirm an interview, an application status, an order, or a payment the profile does not state; otherwise leave it empty. Empty string when classification is routine or spam.
 12. priority: high for customer_service, reservation_issue, time-sensitive requests, and large or high-value opportunities; medium for clear opportunities with specifics; low otherwise.
 
 Return JSON only.`;

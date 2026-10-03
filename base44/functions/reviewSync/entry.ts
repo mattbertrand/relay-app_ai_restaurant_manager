@@ -48,6 +48,7 @@ export default async function(req) {
       restaurantName,
       knowledgeContext: formatKnowledgeForPrompt(knowledgeRecord),
       timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
+      reviewSignature: knowledgeRecord && knowledgeRecord.review_signature ? knowledgeRecord.review_signature : null,
     };
 
     // Provider content-retention enforcement runs on every sync.
@@ -372,6 +373,7 @@ async function analyzeNewReviews(base44, newRecords, ctx, isDemo, providerLabel)
         knowledgeContext: ctx.knowledgeContext,
         timezone: ctx.timezone,
         providerLabel,
+        reviewSignature: ctx.reviewSignature,
       });
     } catch (e) {
       // Analysis failed — keep the review visible and say so plainly.

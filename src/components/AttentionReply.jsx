@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
+import RichDraft from "@/components/RichDraft";
+import RichDraftEditor from "@/components/RichDraftEditor";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Edit3, Save, CheckCircle2 } from "lucide-react";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
+import { htmlToPlainText } from "@/lib/draftText";
 
 // Suggested reply for a live Attention message. "Record Reply" records the
 // response in Relay — no email is actually sent to the customer.
@@ -24,9 +26,9 @@ export default function AttentionReply({ convo, onSaveDraft, onMarkReplied, busy
   // Block navigation away while the editor has unsaved edits — the shared
   // guard offers to save them first.
   useEffect(() => {
-    if (!editing || text === (convo.draft_response || "")) return;
+    if (!editing || htmlToPlainText(text) === htmlToPlainText(convo.draft_response || "")) return;
     setUnsavedChanges({
-      isDirty: () => text !== (convo.draft_response || ""),
+      isDirty: () => htmlToPlainText(text) !== htmlToPlainText(convo.draft_response || ""),
       save: handleSave,
     });
     return () => clearUnsavedChanges();
@@ -47,12 +49,7 @@ export default function AttentionReply({ convo, onSaveDraft, onMarkReplied, busy
       </div>
       {editing ? (
         <div className="space-y-2.5">
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={6}
-            className="resize-none bg-card text-sm"
-          />
+          <RichDraftEditor value={text} onChange={setText} />
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSave} disabled={busy}>
               <Save className="w-3.5 h-3.5 mr-1.5" /> Save
@@ -64,7 +61,7 @@ export default function AttentionReply({ convo, onSaveDraft, onMarkReplied, busy
         </div>
       ) : (
         <>
-          <p className="text-sm text-foreground whitespace-pre-line">{convo.draft_response}</p>
+          <RichDraft text={convo.draft_response} className="text-sm text-foreground" />
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">
             {!replied && (
               <Button size="sm" onClick={() => onMarkReplied(convo, convo.draft_response)} disabled={busy}>

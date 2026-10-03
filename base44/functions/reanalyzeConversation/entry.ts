@@ -58,6 +58,10 @@ export default async function(req) {
       convo,
       messages,
       confirm: payload.confirm === true,
+      reclassChoice:
+        payload.reclass_choice === "resolve" || payload.reclass_choice === "refresh"
+          ? payload.reclass_choice
+          : null,
     });
     return Response.json(result);
   } catch (error) {

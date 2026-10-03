@@ -119,6 +119,10 @@ export function emptyKnowledge() {
       other: "",
     },
     other_info: "",
+    // Draft signatures: a full one for email drafts, a separate shorter
+    // public one for review responses.
+    email_signature: "",
+    review_signature: "",
     // Administration areas — trusted context Relay uses to understand
     // employment, vendor, invoice, and operational communications. Structured
     // so new areas can be added safely later.

@@ -8,14 +8,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import ReclassifyDialog from "@/components/ReclassifyDialog";
 import { base44 } from "@/api/base44Client";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 // Manager action: re-analyze a conversation with the CURRENT Restaurant
-// Knowledge. When the draft was manually edited, the manager must explicitly
-// confirm before a new draft replaces it — the edited version stays
-// recoverable either way. No external email is ever sent.
+// Knowledge. Two explicit gates: a manager-edited draft must be confirmed
+// before a new draft replaces it, and when a worked-on opportunity gets
+// reclassified the manager chooses what happens to it. No external email is
+// ever sent.
 export default function ReanalyzeButton({
   conversationId,
   opportunityId,
@@ -26,23 +28,29 @@ export default function ReanalyzeButton({
   className,
 }) {
   const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [choice, setChoice] = useState(null);
+  const [choiceOpen, setChoiceOpen] = useState(false);
   const { toast } = useToast();
 
-  const run = async (confirm) => {
-    if (busy || confirming) return;
-    if (confirm) setConfirming(true);
-    else setBusy(true);
+  const run = async ({ confirm = false, reclassChoice = null } = {}) => {
+    if (busy) return;
+    setBusy(true);
     try {
       const res = await base44.functions.invoke("reanalyzeConversation", {
         conversation_id: conversationId || undefined,
         opportunity_id: opportunityId || undefined,
         confirm: confirm === true,
+        reclass_choice: reclassChoice || undefined,
       });
       const data = res.data || {};
       if (data.requiresConfirmation) {
         setConfirmOpen(true);
+        return;
+      }
+      if (data.requiresChoice) {
+        setChoice({ opportunityTitle: data.opportunityTitle, newClassification: data.newClassification });
+        setChoiceOpen(true);
         return;
       }
       if (data.error) {
@@ -59,7 +67,6 @@ export default function ReanalyzeButton({
       toast({ title: "Re-analysis failed", description: "Please try again.", variant: "destructive" });
     } finally {
       setBusy(false);
-      setConfirming(false);
     }
   };
 
@@ -69,10 +76,10 @@ export default function ReanalyzeButton({
         variant={variant}
         size={size}
         className={className}
-        disabled={busy || confirming}
-        onClick={() => run(false)}
+        disabled={busy}
+        onClick={() => run()}
       >
-        {busy || confirming ? (
+        {busy ? (
           <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
         ) : (
           <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -92,10 +99,21 @@ export default function ReanalyzeButton({
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => { setConfirmOpen(false); run(true); }}>Re-analyze</Button>
+            <Button onClick={() => { setConfirmOpen(false); run({ confirm: true }); }}>Re-analyze</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ReclassifyDialog
+        open={choiceOpen}
+        onOpenChange={setChoiceOpen}
+        opportunityTitle={choice && choice.opportunityTitle}
+        newClassification={choice && choice.newClassification}
+        busy={busy}
+        onChoice={(c) => {
+          setChoiceOpen(false);
+          run({ confirm: true, reclassChoice: c });
+        }}
+      />
     </>
   );
 }

@@ -9,8 +9,9 @@ import {
   REVIEW_CATEGORY_LABELS,
 } from "@/components/reviews/ReviewBadges";
 import { PROVIDER_META } from "@/lib/reviewProviders";
+import RichDraft from "@/components/RichDraft";
+import RichDraftEditor from "@/components/RichDraftEditor";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import { formatDateTime } from "@/lib/format";
 import { activityLabel, isUserFacingActivity } from "@/lib/activityLabels";
 import { cn } from "@/lib/utils";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
+import { htmlToPlainText } from "@/lib/draftText";
 
 const RESPONSE_STATUS = {
   no_response_needed: { label: "No response needed", cls: "bg-stone-100 text-stone-500 border-stone-200" },
@@ -120,7 +122,7 @@ export default function ReviewDetail() {
   // Block navigation away while the draft editor has unsaved edits —
   // the shared guard offers to save them first.
   useEffect(() => {
-    if (!editing || draft === (review?.draft_response || "")) return;
+    if (!editing || htmlToPlainText(draft) === htmlToPlainText(review?.draft_response || "")) return;
     setUnsavedChanges({
       isDirty: () => true,
       save: async () => {
@@ -410,7 +412,7 @@ export default function ReviewDetail() {
             <p className="text-xs text-muted-foreground">
               This is a draft — it is only published when you explicitly publish it.
             </p>
-            <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} className="resize-none" />
+            <RichDraftEditor value={draft} onChange={setDraft} />
             <div className="flex gap-2">
               <Button onClick={handleSaveDraft} disabled={actionLoading} size="sm">
                 <Save className="w-3.5 h-3.5 mr-1.5" /> Save changes
@@ -429,11 +431,11 @@ export default function ReviewDetail() {
             </div>
           </div>
         ) : (
-          <div className="bg-secondary/40 rounded-lg p-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-            {expired
-              ? "Provider content expired — run a sync to re-retrieve this review before responding."
-              : review.draft_response || "No public response is needed for this review."}
-          </div>
+          <RichDraft
+            text={expired ? "Provider content expired — run a sync to re-retrieve this review before responding." : review.draft_response}
+            emptyLabel="No public response is needed for this review."
+            className="bg-secondary/40 rounded-lg p-4 text-sm text-foreground leading-relaxed"
+          />
         )}
       </div>
 
@@ -517,9 +519,10 @@ export default function ReviewDetail() {
                 : `Your response will be published publicly to ${providerMeta.label} under this review. Relay never publishes without your explicit approval.`}
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-secondary/40 rounded-lg p-3 text-sm text-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
-            {review.draft_response}
-          </div>
+          <RichDraft
+            text={review.draft_response}
+            className="bg-secondary/40 rounded-lg p-3 text-sm text-foreground max-h-40 overflow-y-auto"
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setPublishOpen(false)} disabled={actionLoading}>
               Cancel

@@ -31,6 +31,14 @@
       "type": "string",
       "description": "The restaurant's local timezone as an IANA name (e.g. 'America/Los_Angeles'). All user-facing timestamps are displayed in this timezone; stored timestamps remain UTC."
     },
+    "email_signature": {
+      "type": "string",
+      "description": "The manager's default email signature, appended to email reply drafts (name, title, restaurant, contact details). Editable on each individual draft before approval."
+    },
+    "review_signature": {
+      "type": "string",
+      "description": "The manager's separate, shorter public signature for review responses \u2014 intentionally distinct from the email signature because review platforms are public."
+    },
     "hours": {
       "type": "object",
       "additionalProperties": true,

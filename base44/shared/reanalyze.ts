@@ -32,6 +32,24 @@ export function previousAnalysisSnapshot({ convo, opportunity }) {
   return parts.join("\n\n");
 }
 
+// A readable type label when a reclassification refreshes a matter that is
+// no longer (or never was) a revenue opportunity.
+const ADMIN_TYPE_BY_CATEGORY = {
+  vendor: "Vendor correspondence",
+  job_application: "Job application",
+  billing_administrative: "Billing matter",
+  general_administrative: "Administrative matter",
+};
+function nonOpportunityTypeFor(classification, analysis = {}) {
+  if (analysis.category && ADMIN_TYPE_BY_CATEGORY[analysis.category]) {
+    return ADMIN_TYPE_BY_CATEGORY[analysis.category];
+  }
+  if (analysis.opportunity_type) return analysis.opportunity_type;
+  if (classification === "attention") return "Customer service matter";
+  if (classification === "routine") return "Routine matter";
+  return "Administrative matter";
+}
+
 // A draft the manager edited or already recorded is manager-controlled
 // content — re-analysis may only replace it after explicit confirmation.
 export function isManagerControlled({ convo, opportunity }) {
@@ -41,7 +59,7 @@ export function isManagerControlled({ convo, opportunity }) {
   );
 }
 
-export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo, messages, confirm }) {
+export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo, messages, confirm, reclassChoice }) {
   if (!convo.analysis_status || convo.analysis_status === "Not analyzed") {
     return { error: "This message has not been analyzed yet." };
   }
@@ -95,6 +113,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
     }),
     corrections: formatCorrectionsForPrompt(feedback),
     timezone: knowledge ? knowledge.timezone : null,
+    signature: knowledge && knowledge.email_signature ? knowledge.email_signature : null,
   });
 
   const classification = analysis.classification || "routine";
@@ -107,6 +126,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
     opportunityUpdated: false,
     opportunityCreated: false,
     opportunityRemoved: false,
+    opportunityResolved: false,
     draftReplaced: false,
   };
 
@@ -168,18 +188,79 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
     });
   } else {
     // No longer an opportunity (or never was): recategorize. An untouched,
-    // auto-created opportunity is removed; a manager-touched one stays.
+    // auto-created opportunity is removed. A manager-worked opportunity
+    // (reviewed, edited, or approved) is never silently deleted, refreshed,
+    // or left stale — the manager chooses: resolve it, or update it to the
+    // new classification. A resolved one stays as it is.
     const untouched = !!(
       opportunity &&
       ["New", "Needs Attention"].includes(opportunity.status) &&
       opportunity.draft_status === "Draft"
     );
+    const alreadyResolved = opportunity && opportunity.status === "Resolved";
+    if (opportunity && !untouched && !alreadyResolved && !reclassChoice) {
+      return {
+        requiresChoice: true,
+        reclassified: true,
+        opportunityTitle: opportunity.title,
+        previousClassification: classificationBefore,
+        newClassification: summary.classificationAfter,
+      };
+    }
     if (untouched) {
       await base44.entities.Action.deleteMany({ opportunity_id: opportunity.id });
       await base44.entities.Activity.deleteMany({ opportunity_id: opportunity.id });
       await base44.entities.Opportunity.delete(opportunity.id);
       summary.opportunityRemoved = true;
       oppId = "";
+    } else if (opportunity && reclassChoice === "resolve") {
+      const note = `Re-analysis reclassified the linked message as ${summary.classificationAfter} — resolved by the manager's choice.`;
+      await base44.entities.Opportunity.update(opportunity.id, {
+        status: "Resolved",
+        resolved_at: now,
+        notes: opportunity.notes ? `${opportunity.notes}\n${note}` : note,
+      });
+      const pending = await base44.entities.Action.filter({
+        opportunity_id: opportunity.id,
+        status: "Pending Approval",
+      });
+      if (pending.length) {
+        await base44.entities.Action.bulkUpdate(
+          pending.map((a) => ({ id: a.id, status: "Dismissed" }))
+        );
+      }
+      await base44.entities.Activity.create({
+        restaurant_id: restaurantId,
+        opportunity_id: opportunity.id,
+        conversation_id: convo.id,
+        type: "opportunity_resolved",
+        description: `Opportunity marked Resolved after re-analysis — ${opportunity.title} · Note: ${note}`,
+        is_demo: !!convo.is_demo,
+      });
+      summary.opportunityResolved = true;
+    } else if (opportunity && reclassChoice === "refresh") {
+      const refreshed = {
+        type: nonOpportunityTypeFor(classification, analysis),
+        title: analysis.title || convo.subject,
+        description: analysis.description || analysis.why_flagged,
+        priority: analysis.priority || "medium",
+        recommended_action: analysis.recommended_action || "Review and respond to this inquiry",
+        draft_response: analysis.draft_response || "",
+        draft_status: "Draft",
+        previous_analysis: snapshot,
+        last_analyzed_at: now,
+      };
+      await base44.entities.Opportunity.update(opportunity.id, refreshed);
+      await base44.entities.Activity.create({
+        restaurant_id: restaurantId,
+        opportunity_id: opportunity.id,
+        conversation_id: convo.id,
+        type: "reanalyzed",
+        description: `Opportunity updated to the new classification (${summary.classificationAfter}): ${refreshed.title}`,
+        is_demo: !!convo.is_demo,
+      });
+      summary.opportunityUpdated = true;
+      if (refreshed.draft_response) summary.draftReplaced = true;
     }
     const outcome = conversationUpdatesFor(classification, analysis);
     await base44.entities.Conversation.update(convo.id, {

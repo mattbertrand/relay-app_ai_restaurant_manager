@@ -16,8 +16,9 @@ import LifecycleStepper from "@/components/LifecycleStepper";
 import PreviousAnalysis from "@/components/PreviousAnalysis";
 import ReanalyzeButton from "@/components/ReanalyzeButton";
 import ResolveDialog from "@/components/ResolveDialog";
+import RichDraft from "@/components/RichDraft";
+import RichDraftEditor from "@/components/RichDraftEditor";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, Mail, Phone, User, X, Edit3, Save,
   MessageSquare, Lightbulb, Clock, Sparkles, CheckCircle2, Check, Info, RotateCcw,
@@ -26,6 +27,7 @@ import { formatDateTime } from "@/lib/format";
 import { activityLabel, isUserFacingActivity } from "@/lib/activityLabels";
 import { cn } from "@/lib/utils";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
+import { htmlToPlainText } from "@/lib/draftText";
 
 const DRAFT_STATUS_STYLES = {
   Draft: "bg-stone-100 text-stone-500 border-stone-200",
@@ -148,7 +150,7 @@ export default function OpportunityDetail() {
   // Block navigation away while the draft editor has unsaved edits —
   // the shared guard offers to save them first.
   useEffect(() => {
-    if (!editing || draft === (opp?.draft_response || "")) return;
+    if (!editing || htmlToPlainText(draft) === htmlToPlainText(opp?.draft_response || "")) return;
     setUnsavedChanges({
       isDirty: () => true,
       save: async () => {
@@ -424,12 +426,7 @@ export default function OpportunityDetail() {
             <p className="text-xs text-muted-foreground">
               This is a draft — it still needs your approval before anything is recorded as approved.
             </p>
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={10}
-              className="resize-none"
-            />
+            <RichDraftEditor value={draft} onChange={setDraft} />
             <div className="flex gap-2">
               <Button onClick={handleSaveDraft} disabled={actionLoading} size="sm">
                 <Save className="w-3.5 h-3.5 mr-1.5" /> Save changes
@@ -446,9 +443,10 @@ export default function OpportunityDetail() {
                 <Check className="w-3.5 h-3.5" /> Draft response updated — it still needs your approval.
               </div>
             )}
-            <div className="bg-secondary/40 rounded-lg p-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-              {draft || "No draft prepared yet."}
-            </div>
+            <RichDraft
+              text={draft}
+              className="bg-secondary/40 rounded-lg p-4 text-sm text-foreground leading-relaxed"
+            />
           </>
         )}
       </div>

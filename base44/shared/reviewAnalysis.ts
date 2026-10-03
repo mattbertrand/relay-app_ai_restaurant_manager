@@ -110,6 +110,16 @@ EXISTING PUBLIC OWNER RESPONSE (already posted at the provider):
 An owner response already exists — Relay considers it when determining whether another public response is needed. Ordinarily this review needs no further public response (needs_response false). An existing response NEVER by itself means the underlying issue is resolved: judge the internal follow-up need independently of the response. If the review still reveals a serious unresolved issue the manager must act on internally, classify it accordingly (opportunity or attention) even though no new public response is drafted.`
     : "";
 
+  // The manager's separate, short public signature for review responses —
+  // intentionally distinct from the email signature because review platforms
+  // are public.
+  const signatureBlock = options.reviewSignature
+    ? `
+
+PUBLIC RESPONSE SIGNATURE (provided by the restaurant manager — when needs_response is true, end the public response with exactly this signature on its own lines at the very end; it is intentionally brief because it appears on a public review platform):
+${options.reviewSignature}`
+    : "";
+
   const prompt = `You are reviewing one customer review for "${restaurantName}", a restaurant. Relay's promise to the restaurant is: "Never let another customer opportunity fall through the cracks." Your job is to understand what actually happened in this review and decide how much of the manager's attention it deserves.
 
 THREE SOURCES OF INFORMATION — keep them strictly separate:
@@ -117,7 +127,7 @@ THREE SOURCES OF INFORMATION — keep them strictly separate:
 2. CUSTOMER-PROVIDED INFORMATION: only what the reviewer actually wrote.
 3. YOUR INFERENCE: reasoning combining the two. Never present an inference as a verified restaurant fact.
 
-${knowledgeBlock}${ownerBlock}
+${knowledgeBlock}${ownerBlock}${signatureBlock}
 
 REVIEW (provider: ${providerLabel}${review.is_demo ? " — DEMO DATA, not a live provider" : ""})
 Reviewer: ${review.reviewer_name || "Unknown"}
@@ -155,6 +165,7 @@ RECOMMENDED ACTION: one specific, concrete step — e.g. "Investigate Friday-eve
 DRAFT PUBLIC RESPONSE (only when a public response is warranted — needs_response true):
 A short, professional, public reply the restaurant would post under this review, signed "${restaurantName}". Rules:
 - Acknowledge the reviewer's experience specifically — never argue, never dispute their account.
+- Keep it short and structured: one or two brief paragraphs separated by a blank line, with a closing line at the end — public replies are short.
 - Use ONLY facts from the review and the VERIFIED RESTAURANT PROFILE. Never invent policies, offers, discounts, or compensation — unless the profile explicitly authorizes it.
 - Do not expose internal restaurant information (staffing details, internal processes, other customers).
 - Never mention AI, automation, or how the response was produced.

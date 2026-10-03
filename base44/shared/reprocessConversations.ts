@@ -160,6 +160,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         }),
         corrections,
         timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
+        signature: knowledgeRecord && knowledgeRecord.email_signature ? knowledgeRecord.email_signature : null,
       });
     } catch (e) {
       // Analysis failed — keep the email visible and flagged for manual review

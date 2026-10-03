@@ -10,6 +10,7 @@ import EventsCateringEditor from "@/components/knowledge/EventsCateringEditor";
 import OfferingsEditor from "@/components/knowledge/OfferingsEditor";
 import MenuPoliciesEditor from "@/components/knowledge/MenuPoliciesEditor";
 import MenuItemsEditor from "@/components/knowledge/MenuItemsEditor";
+import SignaturesEditor from "@/components/knowledge/SignaturesEditor";
 import HREditor from "@/components/knowledge/HREditor";
 import VendorsEditor from "@/components/knowledge/VendorsEditor";
 import FinanceEditor from "@/components/knowledge/FinanceEditor";
@@ -19,9 +20,9 @@ import { TextField, SelectField } from "@/components/knowledge/Fields";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
-  Save, Loader2, Check, MapPin, Clock, CalendarCheck, PartyPopper,
+  Save, Loader2, Check, MapPin, Clock, CalendarCheck, PartyPopper, PenLine,
   UtensilsCrossed, Info, Users, Briefcase, Truck, Wallet, Wrench, Megaphone,
-} from "lucide-react";
+  } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 
@@ -47,6 +48,7 @@ const GROUPS = [
     sections: [
       { id: "basics", icon: MapPin, title: "Basic restaurant information", description: "Address and contact details Relay can use to answer customer questions." },
       { id: "hours", icon: Clock, title: "Operating hours", description: "Regular weekly hours plus temporary and special hours." },
+      { id: "signatures", icon: PenLine, title: "Draft signatures", description: "Your default signature for email drafts and a separate, shorter one for public review responses — editable on each draft before approval." },
     ],
   },
   {
@@ -212,6 +214,12 @@ export default function RestaurantKnowledge() {
         return (
           <KnowledgeSection {...common}>
             <HoursEditor value={knowledge} onChange={setKnowledge} />
+          </KnowledgeSection>
+        );
+      case "signatures":
+        return (
+          <KnowledgeSection {...common}>
+            <SignaturesEditor value={knowledge} onChange={setKnowledge} />
           </KnowledgeSection>
         );
       case "offerings":

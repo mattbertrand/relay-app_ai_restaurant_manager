@@ -57,6 +57,7 @@ export default async function(req) {
     const analysis = await classifyReview(base44, restaurantName, review, {
       knowledgeContext: formatKnowledgeForPrompt(knowledgeRecord),
       timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
+      reviewSignature: knowledgeRecord && knowledgeRecord.review_signature ? knowledgeRecord.review_signature : null,
     });
 
     const updates = reviewUpdatesFor(analysis, review);

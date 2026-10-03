@@ -9,6 +9,7 @@ import { conversationGroupKey, pickPrimaryConversation } from "@/lib/dedupe";
 import CorrectionDialog from "@/components/CorrectionDialog";
 import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { htmlToPlainText } from "@/lib/draftText";
 
 // Inbox message lifecycle — what happened with this email: New (needs
 // attention), Reply recorded (responded in Relay), or Archived (out of the
@@ -185,9 +186,9 @@ export default function Inbox() {
   const saveReplyDraft = useCallback(async (convo, text) => {
     await base44.entities.Conversation.update(convo.id, {
       draft_response: text,
-      draft_edited: text !== (convo.relay_draft || ""),
+      draft_edited: htmlToPlainText(text) !== (convo.relay_draft || ""),
     });
-    if (text !== (convo.draft_response || "")) {
+    if (htmlToPlainText(text) !== htmlToPlainText(convo.draft_response || "")) {
       await base44.entities.Activity.create({
         restaurant_id: convo.restaurant_id,
         type: "draft_edited",
@@ -205,7 +206,7 @@ export default function Inbox() {
     try {
       await base44.entities.Conversation.update(convo.id, {
         draft_response: text,
-        draft_edited: text !== (convo.relay_draft || ""),
+        draft_edited: htmlToPlainText(text) !== (convo.relay_draft || ""),
         reply_status: "Reply recorded",
         replied_at: new Date().toISOString(),
         status: "Reply recorded",

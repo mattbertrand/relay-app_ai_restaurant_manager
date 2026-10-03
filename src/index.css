@@ -95,3 +95,43 @@
     letter-spacing: -0.02em;
   }
 }
+
+/* Rich draft rendering — HTML drafts read like a real email */
+.draft-rich p {
+  margin: 0 0 0.75rem;
+}
+.draft-rich p:last-child {
+  margin-bottom: 0;
+}
+.draft-rich ul,
+.draft-rich ol {
+  margin: 0 0 0.75rem 1.25rem;
+  list-style: revert;
+  padding: 0;
+}
+.draft-rich a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+.draft-rich strong {
+  font-weight: 600;
+}
+
+/* Rich draft editor (compact professional toolbar) */
+.draft-editor .ql-toolbar {
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-family: inherit;
+}
+.draft-editor .ql-container {
+  border: 0;
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+.draft-editor .ql-editor {
+  min-height: 140px;
+  line-height: 1.6;
+}
+.draft-editor .ql-editor.ql-blank::before {
+  color: hsl(var(--muted-foreground));
+}
