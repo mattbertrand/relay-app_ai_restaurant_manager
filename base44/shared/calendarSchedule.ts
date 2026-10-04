@@ -37,8 +37,11 @@ function addDays(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 
-// Provider events → normalized {date, time_label, title} in the restaurant's
-// timezone, limited to [fromISO, toISO]. Today's date anchors everything.
+// Provider events → normalized event objects in the restaurant's timezone,
+// limited to [fromISO, toISO]. Today's date anchors everything. Each event
+// carries its start/end time and any details Google provides (location,
+// description, attendees, calendar name) so the Schedule section can show
+// the full event, not just a count.
 export function normalizeCalendarEvents(items, tz, fromISO, toISO) {
   const day = dayFmt(tz);
   const time = timeFmt(tz);
@@ -51,34 +54,60 @@ export function normalizeCalendarEvents(items, tz, fromISO, toISO) {
     if (isNaN(startDate.getTime())) continue;
     const date = day.format(startDate);
     if (date < fromISO || date > toISO) continue;
-    let label = allDay ? "All day" : time.format(startDate);
+    let endTimeLabel = null;
     const endRaw = it.end && (it.end.dateTime || it.end.date);
     if (!allDay && endRaw) {
       const endDate = new Date(endRaw);
       if (!isNaN(endDate.getTime()) && day.format(endDate) === date) {
-        label += `–${time.format(endDate)}`;
+        endTimeLabel = time.format(endDate);
       }
     }
-    events.push({ date, time_label: label, title: String(it.summary || "").trim() || "(untitled)" });
+    const timeLabel = allDay ? "All day" : endTimeLabel ? `${time.format(startDate)}–${endTimeLabel}` : time.format(startDate);
+    const organizer = it.organizer || {};
+    const attendees = (it.attendees || [])
+      .filter((a) => !a.resource)
+      .map((a) => a.displayName || a.email)
+      .filter(Boolean)
+      .slice(0, 20);
+    events.push({
+      date,
+      all_day: allDay,
+      start_time: allDay ? null : time.format(startDate),
+      end_time: endTimeLabel,
+      time_label: timeLabel,
+      title: String(it.summary || "").trim() || "(untitled)",
+      location: String(it.location || "").trim(),
+      description: String(it.description || "").trim().slice(0, 1000),
+      calendar_name: String(organizer.displayName || organizer.email || "").trim() || "Primary calendar",
+      attendees,
+    });
   }
   events.sort((a, b) => (a.date + a.time_label).localeCompare(b.date + b.time_label));
   return events;
 }
 
-// Today's events plus a 7-day count summary — the Schedule section's data.
+// Today's events plus a 7-day summary with each day's own events — the
+// Schedule section's data. Day 0 of the week is today; day labels come from
+// the restaurant's calendar dates, not the manager's browser clock.
 export function summarizeSchedule(events, todayISO) {
   const byDate = {};
-  for (const e of events) byDate[e.date] = (byDate[e.date] || 0) + 1;
+  for (const e of events) (byDate[e.date] = byDate[e.date] || []).push(e);
   const week = [];
   for (let i = 0; i < 7; i++) {
     const iso = addDays(todayISO, i);
     const label = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(
       new Date(`${iso}T12:00:00Z`)
     );
-    week.push({ date: iso, day: label, count: byDate[iso] || 0 });
+    week.push({
+      date: iso,
+      day: label,
+      count: (byDate[iso] || []).length,
+      is_today: i === 0,
+      events: byDate[iso] || [],
+    });
   }
   return {
-    today: events.filter((e) => e.date === todayISO).map((e) => ({ time: e.time_label, title: e.title })),
+    today: byDate[todayISO] || [],
     week,
   };
 }

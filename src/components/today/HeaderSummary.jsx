@@ -57,6 +57,9 @@ export default function HeaderSummary({ name, counts }) {
       <h1 className="font-heading text-2xl md:text-3xl font-semibold text-foreground">
         Hi, {name}. Here's your day.
       </h1>
+      <p className="text-muted-foreground text-sm mt-1">
+        {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+      </p>
       {chips.length === 0 ? (
         <p className="text-muted-foreground text-sm mt-2 inline-flex items-center gap-1.5">
           <CheckCircle2 className="w-4 h-4 text-emerald-500" /> You're all caught up.

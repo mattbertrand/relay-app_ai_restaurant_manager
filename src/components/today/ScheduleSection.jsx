@@ -9,6 +9,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { CalendarClock, CalendarDays, Loader2, Unlink, AlertTriangle, RefreshCw } from "lucide-react";
+import EventDayPanel from "@/components/today/EventDayPanel";
+import { cn } from "@/lib/utils";
 
 // Relay Calendar — the Base44-managed Google Calendar connection each manager
 // signs in with their own Google account. Provider-agnostic: Outlook and
@@ -26,6 +28,9 @@ export default function ScheduleSection({ schedule, onScheduleChanged }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
+  // The selected week day (its ISO date) whose events are shown below the
+  // grid — only days that actually have events are clickable.
+  const [selectedDate, setSelectedDate] = useState(null);
 
   const handleConnect = async (provider) => {
     if (!provider.available) return;
@@ -171,7 +176,7 @@ export default function ScheduleSection({ schedule, onScheduleChanged }) {
           <ul className="space-y-1.5">
             {schedule.today.map((e, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-foreground">
-                <span className="text-xs text-muted-foreground w-24 md:w-28 flex-shrink-0">{e.time}</span>
+                <span className="text-xs text-muted-foreground w-24 md:w-28 flex-shrink-0">{e.time_label}</span>
                 <span className="min-w-0">{e.title}</span>
               </li>
             ))}
@@ -179,15 +184,48 @@ export default function ScheduleSection({ schedule, onScheduleChanged }) {
         )}
         <p className="text-[11px] font-semibold tracking-wide text-muted-foreground mb-2 mt-4">THIS WEEK</p>
         <div className="grid grid-cols-7 gap-1.5">
-          {week.map((d) => (
-            <div key={d.date} className="text-center rounded-lg border border-border py-2">
-              <p className="text-[10px] text-muted-foreground">{d.day}</p>
-              <p className={`text-sm font-semibold ${d.count ? "text-foreground" : "text-muted-foreground/50"}`}>
-                {d.count}
-              </p>
-            </div>
-          ))}
+          {week.map((d) => {
+            // The M/D label is generated from the day's own calendar date —
+            // never hardcoded, and it rolls forward with the current date.
+            const dateLabel = new Intl.DateTimeFormat("en-US", {
+              month: "numeric",
+              day: "numeric",
+              timeZone: "UTC",
+            }).format(new Date(`${d.date}T12:00:00Z`));
+            const clickable = (d.count || 0) > 0;
+            const isOpen = selectedDate === d.date;
+            return (
+              <button
+                key={d.date}
+                type="button"
+                disabled={!clickable}
+                onClick={() => setSelectedDate(isOpen ? null : d.date)}
+                className={cn(
+                  "text-center rounded-lg border py-2 transition-colors px-0.5",
+                  d.is_today ? "border-primary/60 bg-primary/5" : "border-border",
+                  clickable
+                    ? isOpen
+                      ? "border-primary bg-primary/10 cursor-pointer"
+                      : "cursor-pointer hover:bg-muted/60"
+                    : "cursor-default"
+                )}
+              >
+                {d.is_today && <p className="text-[9px] font-semibold tracking-wide text-primary">TODAY</p>}
+                <p className={cn("text-[10px] md:text-[11px]", d.is_today ? "font-semibold text-foreground" : "text-muted-foreground")}>
+                  {d.day} {dateLabel}
+                </p>
+                <p className={cn("text-sm font-semibold", d.count ? "text-foreground" : "text-muted-foreground/50")}>
+                  {d.count}
+                </p>
+              </button>
+            );
+          })}
         </div>
+        {(() => {
+          const selectedDay = week.find((d) => d.date === selectedDate);
+          if (!selectedDay || !selectedDay.events || !selectedDay.events.length) return null;
+          return <EventDayPanel date={selectedDay.date} events={selectedDay.events} onClose={() => setSelectedDate(null)} />;
+        })()}
         <p className="text-[11px] text-muted-foreground mt-3">
           From {schedule.provider_label || schedule.provider} · Relay reads your schedule; it never creates events or
           sends invitations.
