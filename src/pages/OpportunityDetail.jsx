@@ -13,6 +13,7 @@ import {
 } from "@/lib/opportunityActions";
 import { NEW_STATUSES, lifecycleStatus, nextStepFor } from "@/lib/opportunityLifecycle";
 import LifecycleStepper from "@/components/LifecycleStepper";
+import BackToToday from "@/components/BackToToday";
 import PreviousAnalysis from "@/components/PreviousAnalysis";
 import ReanalyzeButton from "@/components/ReanalyzeButton";
 import ResolveDialog from "@/components/ResolveDialog";
@@ -258,6 +259,8 @@ export default function OpportunityDetail() {
           <ArrowLeft className="w-4 h-4" /> Back to Opportunities
         </Link>
       )}
+
+      <BackToToday label="Opportunities" />
 
       {/* Header */}
       <div className="mb-6">

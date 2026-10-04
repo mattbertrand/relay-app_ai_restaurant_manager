@@ -20,6 +20,7 @@ import {
   formatResponseTemplatesForPrompt,
 } from "../../shared/restaurantKnowledge.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
+import { calendarAnalysisContext } from "../../shared/calendarSchedule.ts";
 
 // Gmail sync for Relay — imports new mail, classifies it, and supports reprocessing.
 const MAX_MESSAGES = 20;
@@ -476,6 +477,7 @@ export default async function(req) {
           }),
           corrections,
           templatesContext: formatResponseTemplatesForPrompt(knowledgeRecord),
+          calendarContext: await calendarAnalysisContext(base44, knowledgeRecord, item.subject, item.body),
           timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
           signature: knowledgeRecord && knowledgeRecord.email_signature ? knowledgeRecord.email_signature : null,
         });

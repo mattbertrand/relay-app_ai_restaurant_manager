@@ -4,6 +4,7 @@ import {
   conversationUpdatesFor,
   ANALYSIS_VERSION,
 } from "./emailAnalysis.ts";
+import { calendarAnalysisContext } from "./calendarSchedule.ts";
 import {
   loadKnowledge,
   loadRecentFeedback,
@@ -173,6 +174,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         }),
         corrections,
         templatesContext: formatResponseTemplatesForPrompt(knowledgeRecord),
+        calendarContext: await calendarAnalysisContext(base44, knowledgeRecord, convo.subject, body),
         timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
         signature: knowledgeRecord && knowledgeRecord.email_signature ? knowledgeRecord.email_signature : null,
       });

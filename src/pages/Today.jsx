@@ -2,20 +2,19 @@ import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import DemoBanner from "@/components/DemoBanner";
 import { Button } from "@/components/ui/button";
-import WorkloadSummary from "@/components/today/WorkloadSummary";
-import AttentionSection from "@/components/today/AttentionSection";
-import FollowUpsSection from "@/components/today/FollowUpsSection";
-import RevenueSection from "@/components/today/RevenueSection";
+import HeaderSummary from "@/components/today/HeaderSummary";
+import ScheduleSection from "@/components/today/ScheduleSection";
+import NeedsActionSection from "@/components/today/NeedsActionSection";
 import NewEmailsSection from "@/components/today/NewEmailsSection";
 import ReviewsSection from "@/components/today/ReviewsSection";
-import InProgressSection from "@/components/today/InProgressSection";
 import UpcomingSection from "@/components/today/UpcomingSection";
 import { RefreshCw } from "lucide-react";
 
-// Today — the manager's first screen: what's on the plate, what needs
-// attention, what was promised, and where revenue may be won or lost.
+// Today — the manager's command center. In about a minute it answers:
+// How busy am I? (header + schedule) · What needs me? (Needs Action) ·
+// What just arrived? (New Emails, New Reviews) · What's coming up?
 // All numbers and items come from the todayDashboard function's pass over
-// the restaurant's actual Relay data.
+// the restaurant's actual Relay data — never invented.
 export default function Today() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -58,27 +57,20 @@ export default function Today() {
 
   return (
     <div className="p-5 md:p-8 max-w-5xl mx-auto pb-20 md:pb-8">
-      <div className="flex items-start justify-between gap-3 mb-6">
-        <div>
-          <h1 className="font-heading text-2xl md:text-3xl font-semibold text-foreground">
-            Hi, {data.manager_first_name}.
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">Here's what needs your attention today.</p>
-        </div>
+      <div className="flex items-start justify-end mb-1">
         <Button variant="outline" size="sm" onClick={loadData}>
           <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
         </Button>
       </div>
 
+      <HeaderSummary name={data.manager_first_name} counts={data.counts} />
+
       {data.has_demo && <div className="mb-6"><DemoBanner /></div>}
 
-      <WorkloadSummary summary={data.summary} />
-      <AttentionSection items={data.attention_items} />
-      <FollowUpsSection items={data.follow_ups} />
-      <RevenueSection items={data.revenue_opportunities} />
-      <NewEmailsSection summary={data.summary} />
+      <ScheduleSection schedule={data.schedule} onScheduleChanged={loadData} />
+      <NeedsActionSection items={data.need_action} count={data.counts.need_action} />
+      <NewEmailsSection emails={data.emails} />
       <ReviewsSection reviews={data.reviews} />
-      <InProgressSection items={data.in_progress} />
       <UpcomingSection
         todayItems={data.today_items}
         upcomingItems={data.upcoming_items}

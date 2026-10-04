@@ -20,6 +20,7 @@ const ANALYSIS_SCHEMA = {
         "reservation_issue",
         "customer_service",
         "general_customer_inquiry",
+        "scheduling_request",
         "high_value_business",
         "partnership",
         // Administrative
@@ -84,6 +85,7 @@ const TYPE_BY_CATEGORY = {
   customer_service: "Customer service issue",
   high_value_business: "Business inquiry",
   partnership: "Business inquiry",
+  scheduling_request: "Scheduling request",
 };
 
 export function opportunityTypeFor(category) {
@@ -94,7 +96,7 @@ export function opportunityTypeFor(category) {
 // the analysis prompt change. Every analyzed conversation is stamped with it,
 // so re-analysis runs skip messages already classified by the current rules
 // and only pick up stale ones (idempotent — no repeated activity noise).
-export const ANALYSIS_VERSION = 8;
+export const ANALYSIS_VERSION = 9;
 
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
@@ -252,6 +254,18 @@ RESPONSE TEMPLATES (defined by this restaurant's manager — how THIS restaurant
 ${options.templatesContext}`
     : "";
 
+  // The manager's connected calendar — when one exists, drafts may offer only
+  // genuinely free times; when it does not, drafts never claim availability.
+  const calendarBlock = options.calendarContext
+    ? `
+
+CONNECTED CALENDAR AVAILABILITY (verified from the manager's connected calendar — authoritative; never contradict or extend it):
+${options.calendarContext}
+When the sender asks to meet, talk, or find a time: offer only times that do not conflict with the listed commitments, within the next 7 days and the restaurant's local timezone. Offer one to three specific alternatives (e.g. "I'm available Tuesday at 11:00 AM or Wednesday at 2:30 PM."). Never state that anything is booked or confirmed — offer the times and let the sender choose; the manager confirms afterward. Relay never creates calendar events.`
+    : `
+
+CALENDAR AVAILABILITY: The manager's calendar is not connected, so no availability can be verified. When the sender asks to meet, schedule a time, or talk: never offer or imply specific times — say the manager will confirm availability (e.g. "Let me check our schedule and get back to you with a few times.") or ask which days or times work best for them. Never invent availability.`;
+
   const prompt = `You are reviewing one incoming email for "${restaurantName}", a restaurant. Relay's promise to the restaurant is: "Never let another customer opportunity fall through the cracks." Your job is to understand the sender's actual intent and decide how much of the manager's attention it deserves. Do not just match keywords — read the message the way a thoughtful manager would.
 
 Each email is analyzed on its own merits. The same customer may have many completely separate matters — judge THIS message by what THIS message says, never by who sent it.
@@ -260,7 +274,7 @@ THREE SOURCES OF INFORMATION — keep them strictly separate and never blur them
 1. VERIFIED RESTAURANT INFORMATION (below): facts the manager entered or confirmed. This is authoritative for restaurant-specific facts. Never contradict it. When you use one of these facts, say so (e.g. "The restaurant profile states a maximum standard party size of 10.").
 2. CUSTOMER-PROVIDED INFORMATION: only what the customer actually wrote (e.g. "The customer is asking about a party of 18.").
 3. YOUR INFERENCE: reasoning that combines the two (e.g. "This appears to be a private-event inquiry."). Never present an inference as a verified restaurant fact, and never invent restaurant facts at all.
-${knowledgeBlock}${adminBlock}${correctionsBlock}${templatesBlock}${dateBlock}${detectedBlock}${signatureBlock}
+${knowledgeBlock}${adminBlock}${correctionsBlock}${templatesBlock}${calendarBlock}${dateBlock}${detectedBlock}${signatureBlock}
 
 CUSTOMER NAME (never violate): The greeting must address the CUSTOMER who wrote this message — never the restaurant's manager, owner, or any name that appears in the restaurant profile, its contacts, the admin context, or the signature block; those are restaurant-side people, not the customer. The customer's name, in priority order: (1) the personal name the sender signed the message with (e.g. "Thank you, Daniel" → greet Daniel), (2) the From line's display name, (3) a neutral greeting ("Hello,"). When the display name looks like an account holder's name and the message is signed by someone else, the signed name wins. First name only, unless it is ambiguous. The manager's name may only ever appear restaurant-side, never as the customer.
 
@@ -282,6 +296,7 @@ CLASSIFICATION (choose exactly one)
   * significant service issues
   * other important customer requests
   * business/partnership inquiries
+  * meeting and appointment requests — classify by the underlying matter (a meeting about hosting an event is an opportunity; a vendor meeting is administrative; a community or general business meeting is attention)
 - attention: real customer intent worth a manager's glance, but NOT a revenue opportunity. These stay visible in the Inbox but never become Opportunities:
   * simple informational questions a real customer asked — e.g. "Hi, are you open this Sunday?" is a legitimate customer inquiry (recognize the intent; if the profile contains Sunday hours you may draft the answer with them)
   * questions with typos, informal wording, or unusual phrasing — judge the sender's intent, never their spelling: "What are your oping hours on Tuesday?" is an operating-hours question, not a test or junk mail
@@ -304,6 +319,7 @@ CLASSIFICATION (choose exactly one)
 CATEGORY (choose exactly one)
 - Customer / revenue (when classification is opportunity): catering, private_event, reservation, reservation_issue, customer_service, high_value_business, partnership
 - general_customer_inquiry: a real customer asked a question (classification attention, or opportunity only in the rare case a question itself shows purchase intent worth tracking)
+- scheduling_request: the message's PRIMARY purpose is arranging a meeting, call, appointment, or visit (e.g. "Would you be available to meet next week?", "Can we schedule a time to discuss the fundraiser?") rather than the underlying matter itself
 - Administrative (classification administrative): job_application, vendor, billing_administrative, general_administrative
 - Routine (classification routine): general_information, automated_notification, non_actionable
 - Spam (classification spam): spam, newsletter, irrelevant_promotional

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import DemoBanner from "@/components/DemoBanner";
+import BackToToday from "@/components/BackToToday";
 import EmptyState from "@/components/EmptyState";
 import ConversationCard from "@/components/ConversationCard";
 import { Button } from "@/components/ui/button";
@@ -248,7 +249,13 @@ export default function Inbox() {
 
   const filtered = (conversations || []).filter((c) => {
     const statusOk = filter === "All" || c.status === filter;
-    const analysisOk = !analysisFilter || c.analysis_status === analysisFilter;
+    // "Needs review" gathers messages Relay hasn't classified yet, including
+    // ones whose analysis failed — they all need a human look.
+    const analysisOk =
+      !analysisFilter ||
+      (analysisFilter === "Needs review"
+        ? !c.analysis_status || c.analysis_status === "Not analyzed" || c.analysis_status === "Needs review"
+        : c.analysis_status === analysisFilter);
     const sourceOk =
       source === "all" ||
       (source === "gmail" && c.source === "Gmail" && !c.is_demo) ||
@@ -281,6 +288,7 @@ export default function Inbox() {
 
   return (
     <div className="p-5 md:p-8 max-w-5xl mx-auto pb-20 md:pb-8">
+      <BackToToday label="Inbox" />
       <div className="flex items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="font-heading text-2xl md:text-3xl font-semibold text-foreground">Inbox</h1>

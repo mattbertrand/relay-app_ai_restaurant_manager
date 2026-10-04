@@ -7,6 +7,7 @@ import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { formatValueRange, timeAgo } from "@/lib/format";
 import { CheckSquare, Check, X, Clock, FileText, Bell, User } from "lucide-react";
+import BackToToday from "@/components/BackToToday";
 import { cn } from "@/lib/utils";
 
 const FILTERS = ["All", "Pending Approval", "Approved", "Completed", "Dismissed"];
@@ -87,6 +88,7 @@ export default function Actions() {
 
   return (
     <div className="p-5 md:p-8 max-w-5xl mx-auto pb-20 md:pb-8">
+      <BackToToday label="Actions" />
       <div className="mb-6">
         <h1 className="font-heading text-2xl md:text-3xl font-semibold text-foreground">Actions</h1>
         <p className="text-muted-foreground text-sm mt-1">Recommended actions from Relay. Everything requires your approval.</p>

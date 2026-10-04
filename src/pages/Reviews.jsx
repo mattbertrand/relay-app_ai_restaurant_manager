@@ -8,6 +8,7 @@ import DemoBanner from "@/components/DemoBanner";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { RefreshCw, Star } from "lucide-react";
+import BackToToday from "@/components/BackToToday";
 import { PROVIDER_META, UPCOMING_PROVIDERS, sourceMetaFor } from "@/lib/reviewProviders";
 import { cn } from "@/lib/utils";
 
@@ -121,6 +122,7 @@ export default function Reviews() {
 
   return (
     <div className="p-5 md:p-8 max-w-4xl mx-auto pb-20 md:pb-8">
+      <BackToToday label="Reviews" />
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
         <div>
           <h1 className="font-heading text-2xl md:text-3xl font-semibold text-foreground">Reviews</h1>

@@ -10,6 +10,7 @@ import {
 } from "@/components/reviews/ReviewBadges";
 import { PROVIDER_META } from "@/lib/reviewProviders";
 import RichDraft from "@/components/RichDraft";
+import BackToToday from "@/components/BackToToday";
 import RichDraftEditor from "@/components/RichDraftEditor";
 import { Button } from "@/components/ui/button";
 import {
@@ -228,6 +229,7 @@ export default function ReviewDetail() {
 
   return (
     <div className="p-5 md:p-8 max-w-3xl mx-auto pb-20 md:pb-8">
+      <BackToToday label="Reviews" />
       <Link
         to="/reviews"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"

@@ -1,10 +1,13 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { loadKnowledge } from "../../shared/restaurantKnowledge.ts";
+import { calendarScheduleContext } from "../../shared/calendarSchedule.ts";
 
-// Today dashboard: one server-side pass over the restaurant's actual Relay
-// data — workload counts, prioritized attention items, follow-ups, review
-// summary, in-progress and revenue opportunities, and dated items for Today &
-// Upcoming. No numbers are invented; nothing is counted twice.
+// Today dashboard — one server-side pass producing the manager's one-minute
+// day: headline counts, the unified "Needs Action" queue (labels, not
+// sections), new emails, new reviews by provider, the calendar schedule, and
+// dated commitments for Today & Upcoming. No numbers are invented and nothing
+// is counted twice: follow-ups, emails, opportunities, and reviews each feed
+// exactly one count.
 
 const ACTIVE_OPP = (status) =>
   !(["Resolved", "Completed", "Dismissed"].includes(status)) &&
@@ -17,17 +20,15 @@ const REVENUE_TYPES = [
   "Reservation inquiry",
 ];
 
-function guestsFrom(text) {
-  const t = String(text || "");
-  const range = /(\d{1,4})\s*(?:-|–|to)\s*(\d{1,4})\s*(?:guests?|people|persons?|attendees?)/i.exec(t);
-  if (range) return `${range[1]}–${range[2]} guests`;
-  const single = /(\d{1,4})\s*(?:guests?|people|persons?|attendees?)/i.exec(t);
-  return single ? `${single[1]} guests` : null;
-}
-
 function firstLine(text, max = 160) {
   const s = String(text || "").split("\n").find((l) => l.trim());
   return s ? (s.length > max ? s.slice(0, max) + "…" : s) : "";
+}
+
+function addDays(iso, n) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 export default async function(req) {
@@ -53,23 +54,23 @@ export default async function(req) {
     const actions = actionPage.items || [];
     const reviews = reviewPage.items || [];
 
-    // The restaurant's local date anchors "today" and the 30-day window.
+    // The restaurant's local date anchors "today" and the windows.
     const tz = (knowledge && knowledge.timezone) || "America/Los_Angeles";
     const inTz = (date, opts) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, ...opts }).format(date);
     const today = inTz(new Date(), { year: "numeric", month: "2-digit", day: "2-digit" });
-    const horizon = inTz(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), { year: "numeric", month: "2-digit", day: "2-digit" });
+    const horizon = addDays(today, 30);
+    const sevenDays = addDays(today, 7);
     const weekday = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long" }).format(new Date());
+
+    // The manager's connected calendar — provider-agnostic; never throws.
+    const schedule = await calendarScheduleContext(base44, knowledge ? knowledge.timezone : null);
 
     const firstName = (user.full_name || "").trim().split(/\s+/)[0] || "there";
 
-    // ---- Workload counts (each record counted exactly once per line) ----
     const newConvos = convos.filter((c) => c.status === "New");
     const activeOpps = opps.filter((o) => ACTIVE_OPP(o.status));
     const pendingFollowUps = actions.filter((a) => a.type === "Follow-up" && a.status === "Pending Approval");
     const newReviews = reviews.filter((r) => (r.manager_status || "New") === "New");
-    const needsResponseReviews = reviews.filter(
-      (r) => r.classification === "Attention" && ["New", "In Progress"].includes(r.manager_status || "New")
-    );
 
     const breakdown = { opportunity: 0, attention: 0, administrative: 0, informational: 0, spam: 0, needs_review: 0 };
     for (const c of newConvos) {
@@ -81,125 +82,132 @@ export default async function(req) {
       else breakdown.needs_review++;
     }
 
-    // ---- Needs Your Attention (prioritized; each record appears once) ----
-    const items = [];
+    // ---- Needs Action: the ONE prioritized queue. Revenue, In Progress, and
+    // Attention are tags here — never separate sections. ----
+    const queue = [];
+
+    // 1. Follow-ups the manager personally promised (recorded responses only).
     for (const a of pendingFollowUps) {
       const overdue = !!a.due_date && a.due_date < today;
-      items.push({
+      const dueToday = a.due_date === today;
+      queue.push({
         kind: "follow_up",
-        urgency: overdue ? "overdue" : a.due_date && a.due_date === today ? "due" : "normal",
-        score: overdue ? 100 : a.due_date && a.due_date === today ? 90 : 55,
-        label: "CUSTOMER FOLLOW-UP",
+        id: a.id,
+        urgency: overdue ? "overdue" : dueToday ? "due" : "normal",
+        score: overdue ? 100 : dueToday ? 90 : a.due_date ? 55 : 65,
+        tags: ["Follow-up"],
         title: a.description,
-        lines: [a.due_date ? (overdue ? `Was due ${a.due_date}` : `Due ${a.due_date}`) : "Needs a due date"],
+        when: overdue ? "Overdue" : dueToday ? "Due today" : a.due_date ? `Due ${a.due_date}` : "Needs scheduling",
+        lines: [],
         link: a.opportunity_id ? `/opportunities/${a.opportunity_id}` : "/actions",
         focus_conversation_id: a.conversation_id || "",
       });
     }
+
+    // 2. New emails that genuinely need the manager.
     for (const c of newConvos) {
-      if (c.analysis_status !== "Attention") continue;
-      const repeated = /repea|multiple|several|unanswered|never (got|received)|waiting|tried (calling|twice|again)/i.test(
-        `${c.why_flagged || ""} ${c.intent || ""} ${c.message || ""}`
-      );
-      items.push({
-        kind: "email",
-        urgency: repeated ? "high" : "normal",
-        score: repeated ? 80 : 60,
-        label: (c.intent || "CUSTOMER INQUIRY").toUpperCase(),
-        title: c.subject,
-        lines: [
-          `From ${c.customer_name}`,
-          repeated
-            ? "Customer has contacted the restaurant multiple times without receiving a response — immediate attention recommended."
-            : c.recommended_action || c.why_flagged || "",
-        ].filter(Boolean),
-        link: "/inbox",
-        focus_conversation_id: c.id,
-      });
+      if (c.analysis_status === "Attention") {
+        const repeated = /repea|multiple|several|unanswered|never (got|received)|waiting|tried (calling|twice|again)/i.test(
+          `${c.why_flagged || ""} ${c.intent || ""} ${c.message || ""}`
+        );
+        queue.push({
+          kind: "email",
+          id: c.id,
+          urgency: repeated ? "high" : "normal",
+          score: repeated ? 85 : 60,
+          tags: ["Customer"],
+          title: c.subject,
+          when: "",
+          lines: [`From ${c.customer_name}`, firstLine(c.recommended_action || c.why_flagged || "", 140)].filter(Boolean),
+          link: "/inbox",
+          focus_conversation_id: c.id,
+        });
+      } else if (c.analysis_status === "Administrative") {
+        const isVendor = (c.category || "") === "vendor";
+        queue.push({
+          kind: "email",
+          id: c.id,
+          urgency: "normal",
+          score: 45,
+          tags: isVendor ? ["Vendor", "Administrative"] : ["Administrative"],
+          title: c.subject,
+          when: "",
+          lines: [`From ${c.customer_name}`, firstLine(c.recommended_action || "", 140)].filter(Boolean),
+          link: "/inbox",
+          focus_conversation_id: c.id,
+        });
+      }
     }
+
+    // 3. Active opportunities — New and In Progress alike; status is a tag.
     for (const o of activeOpps) {
-      if (o.priority !== "high") continue;
-      items.push({
+      const tags = [];
+      tags.push(o.status === "In Progress" ? "In Progress" : "New");
+      if (REVENUE_TYPES.includes(o.type) || (o.estimated_value_min && o.estimated_value_min > 0)) {
+        tags.push("Revenue opportunity");
+      }
+      if (/reservation/i.test(o.type || "")) tags.push("Reservation");
+      if (/private event|catering/i.test(o.type || "")) tags.push("Event");
+      if (/vendor/i.test(o.type || "")) tags.push("Vendor");
+      if (o.priority === "high") tags.push("High priority");
+      const soon = o.event_date && o.event_date >= today && o.event_date <= sevenDays;
+      queue.push({
         kind: "opportunity",
-        urgency: "high",
-        score: 75,
-        label: (o.type || "OPPORTUNITY").toUpperCase(),
+        id: o.id,
+        urgency: o.priority === "high" ? "high" : "normal",
+        score:
+          (o.priority === "high" ? 75 : o.priority === "low" ? 45 : 60) +
+          (soon ? 8 : 0) +
+          (o.status === "In Progress" ? 5 : 0),
+        tags,
         title: o.title,
-        lines: [o.recommended_action || o.description || "", o.customer_name ? `Customer: ${o.customer_name}` : ""].filter(Boolean),
+        when: o.event_date ? (o.event_date === today ? "Today" : `Event ${o.event_date}`) : "",
+        lines: [
+          firstLine(o.recommended_action || o.description || "", 140),
+          o.customer_name ? `Customer: ${o.customer_name}` : "",
+        ].filter(Boolean),
         link: `/opportunities/${o.id}`,
         focus_conversation_id: "",
       });
     }
-    for (const r of needsResponseReviews) {
-      items.push({
-        kind: "review",
-        urgency: r.rating <= 2 ? "high" : "normal",
-        score: r.rating <= 2 ? 70 : 50,
-        label: "REVIEW NEEDS RESPONSE",
-        title: `${r.rating ? "★".repeat(r.rating) + " " : ""}${r.provider === "google" ? "Google" : r.provider || "Review"} — ${r.reviewer_name || "Reviewer"}`,
-        lines: [firstLine(r.review_text, 120), r.why_flagged || ""].filter(Boolean),
-        link: `/reviews/${r.id}`,
-        focus_conversation_id: "",
+
+    queue.sort((a, b) => b.score - a.score);
+
+    // ---- New Reviews by provider. Google is the only connected provider
+    // today and always appears (a true zero state); any future provider shows
+    // up only when it actually has data — no empty placeholders. ----
+    const providerLabels = { google: "Google" };
+    const providerOrder = ["google"];
+    const byProvider = {};
+    for (const r of newReviews) (byProvider[r.provider || "google"] = byProvider[r.provider || "google"] || []).push(r);
+    const providerRows = [];
+    const pushProviderRow = (p) => {
+      const list = byProvider[p] || [];
+      const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      for (const r of list) {
+        const stars = Math.min(5, Math.max(1, Number(r.rating) || 0));
+        if (distribution[stars] !== undefined) distribution[stars]++;
+      }
+      providerRows.push({
+        provider: p,
+        label: providerLabels[p] || p,
+        new: list.length,
+        needs_response: list.filter((r) => ["Opportunity", "Attention"].includes(r.classification)).length,
+        distribution,
       });
-    }
-    items.sort((a, b) => b.score - a.score);
-    const attentionItems = items.slice(0, 6);
+      delete byProvider[p];
+    };
+    for (const p of providerOrder) pushProviderRow(p);
+    for (const p of Object.keys(byProvider).sort()) pushProviderRow(p);
 
-    // ---- Follow-ups ----
-    const followUps = pendingFollowUps
-      .sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999"))
-      .slice(0, 6)
-      .map((a) => ({
-        id: a.id,
-        description: a.description,
-        due_date: a.due_date || "",
-        overdue: !!a.due_date && a.due_date < today,
-        due_today: a.due_date === today,
-        link: a.opportunity_id ? `/opportunities/${a.opportunity_id}` : "/inbox",
-        focus_conversation_id: a.conversation_id || "",
-      }));
-
-    // ---- Revenue opportunities ----
-    const revenueOpps = activeOpps
-      .filter((o) => REVENUE_TYPES.includes(o.type) || (o.estimated_value_min && o.estimated_value_min > 0))
-      .sort((a, b) => (b.priority === "high") - (a.priority === "high"))
-      .slice(0, 5)
-      .map((o) => ({
-        id: o.id,
-        title: o.title,
-        type: o.type,
-        guests: guestsFrom(`${o.description || ""} ${o.original_message || ""}`),
-        note: firstLine(o.description || o.why_identified || "", 180),
-        status: o.status,
-        link: `/opportunities/${o.id}`,
-      }));
-
-    // ---- Opportunities in progress ----
-    const inProgress = opps
-      .filter((o) => o.status === "In Progress")
-      .slice(0, 5)
-      .map((o) => ({
-        id: o.id,
-        title: o.title,
-        customer: o.customer_name || "",
-        waiting: o.recommended_action || firstLine(o.notes || "", 120) || "",
-        link: `/opportunities/${o.id}`,
-      }));
-
-    // ---- Reviews summary ----
-    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-    for (const r of newReviews) {
-      const stars = Math.min(5, Math.max(1, Number(r.rating) || 0));
-      if (distribution[stars] !== undefined) distribution[stars]++;
-    }
-
-    // ---- Today & Upcoming (only what Relay actually knows) ----
+    // ---- Today & Upcoming: only what Relay actually knows. ----
     const todayItems = [];
     const upcomingItems = [];
     for (const a of pendingFollowUps) {
       if (!a.due_date) continue;
-      if (a.due_date === today) todayItems.push({ date: a.due_date, label: `Follow-up due — ${a.description}` });
-      else if (a.due_date > today && a.due_date <= horizon) upcomingItems.push({ date: a.due_date, label: `Follow-up due — ${a.description}` });
+      const label = `Follow-up due — ${a.description}`;
+      if (a.due_date === today) todayItems.push({ date: a.due_date, label });
+      else if (a.due_date > today && a.due_date <= horizon) upcomingItems.push({ date: a.due_date, label });
     }
     for (const o of activeOpps) {
       if (!o.event_date) continue;
@@ -226,24 +234,21 @@ export default async function(req) {
 
     return Response.json({
       manager_first_name: firstName,
-      summary: {
-        new_emails: newConvos.length,
-        emails: breakdown,
-        opportunities: activeOpps.length,
-        immediate_attention: breakdown.attention + activeOpps.filter((o) => o.priority === "high").length,
+      counts: {
+        need_action: queue.length,
         follow_ups: pendingFollowUps.length,
+        new_emails: newConvos.length,
         new_reviews: newReviews.length,
-        reviews_needs_response: needsResponseReviews.length,
+        scheduled_today: schedule.connected ? schedule.today.length : 0,
       },
-      attention_items: attentionItems,
-      follow_ups: followUps,
-      revenue_opportunities: revenueOpps,
-      in_progress: inProgress,
+      need_action: queue.slice(0, 8),
+      emails: { new: newConvos.length, breakdown },
       reviews: {
         new: newReviews.length,
-        needs_response: needsResponseReviews.length,
-        distribution,
+        needs_response: providerRows.reduce((n, p) => n + p.needs_response, 0),
+        providers: providerRows,
       },
+      schedule,
       today_items: todayItems.slice(0, 6),
       upcoming_items: upcomingItems.slice(0, 4),
       upcoming_all: upcomingItems.slice(0, 20),

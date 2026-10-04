@@ -7,6 +7,7 @@ import {
   opportunityTypeFor,
   conversationUpdatesFor,
 } from "./emailAnalysis.ts";
+import { calendarAnalysisContext } from "./calendarSchedule.ts";
 import {
   loadKnowledge,
   loadRecentFeedback,
@@ -151,6 +152,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, resta
     }),
     corrections: formatCorrectionsForPrompt(feedback),
     templatesContext: formatResponseTemplatesForPrompt(knowledge),
+    calendarContext: await calendarAnalysisContext(base44, knowledge, convo.subject, body),
     timezone: knowledge ? knowledge.timezone : null,
     signature: knowledge && knowledge.email_signature ? knowledge.email_signature : null,
   });
