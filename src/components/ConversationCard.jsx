@@ -3,13 +3,13 @@ import { Link } from "react-router-dom";
 import StatusBadge from "@/components/StatusBadge";
 import AnalysisPanel from "@/components/AnalysisPanel";
 import AttentionReply from "@/components/AttentionReply";
-import DraftProvenance from "@/components/DraftProvenance";
 import ConversationOriginal from "@/components/ConversationOriginal";
 import PreviousAnalysis from "@/components/PreviousAnalysis";
 import ReanalyzeButton from "@/components/ReanalyzeButton";
 import { Button } from "@/components/ui/button";
 import { Mail, Archive, AlertCircle, Undo2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
+import { categoryLabel } from "@/lib/classification";
 import { cn } from "@/lib/utils";
 
 // One inbox conversation. The Inbox lifecycle (New → Reply recorded → Archived)
@@ -57,22 +57,25 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
             <p className="text-xs text-muted-foreground">{convo.customer_email}</p>
           )}
           <h3 className="text-sm font-medium text-foreground mt-2">{convo.subject}</h3>
-          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
           {isLive && hasAnalysis && (
-            <AnalysisPanel convo={convo}>
-              {showDraft && <DraftProvenance convo={convo} />}
-              {showDraft && (
-                <AttentionReply
-                  convo={convo}
-                  onSaveDraft={onSaveReplyDraft}
-                  onMarkReplied={onMarkReplied}
-                  busy={replyBusy}
-                />
-              )}
-            </AnalysisPanel>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {convo.analysis_status === "Opportunity" ? "Revenue opportunity" : convo.analysis_status}
+              {convo.category ? ` · ${categoryLabel(convo.category)}` : ""}
+              {convo.intent ? ` · ${convo.intent}` : ""}
+            </p>
           )}
+          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
+          {isLive && <AnalysisPanel convo={convo} />}
           {isLive && <ConversationOriginal convo={convo} />}
           {isLive && <PreviousAnalysis text={convo.previous_analysis} className="mt-2.5" />}
+          {showDraft && (
+            <AttentionReply
+              convo={convo}
+              onSaveDraft={onSaveReplyDraft}
+              onMarkReplied={onMarkReplied}
+              busy={replyBusy}
+            />
+          )}
           {convo.opportunity_id && (
             <Link
               to={`/opportunities/${convo.opportunity_id}`}
