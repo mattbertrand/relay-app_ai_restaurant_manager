@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { CalendarClock, CalendarDays, Loader2, Unlink, Check } from "lucide-react";
+import { CalendarClock, CalendarDays, Loader2, Unlink, AlertTriangle, RefreshCw } from "lucide-react";
 
 // Relay Calendar — the Base44-managed Google Calendar connection each manager
 // signs in with their own Google account. Provider-agnostic: Outlook and
@@ -136,9 +136,37 @@ export default function ScheduleSection({ schedule, onScheduleChanged }) {
         </button>
       </div>
       <div className="bg-card rounded-xl border border-border p-4 md:p-5">
+        {/* A connected calendar whose events can't be loaded is a calendar-data
+            error — never rendered as "not connected". The state and the error
+            message come straight from the calendar read itself. */}
+        {schedule.status === "fetch_error" && (
+          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-800">Calendar connected — couldn't load events</p>
+              <p className="text-xs text-amber-700 mt-1 leading-relaxed">{schedule.error_message}</p>
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  onClick={() => { if (onScheduleChanged) onScheduleChanged(); }}
+                  className="text-xs font-medium text-amber-800 hover:text-amber-900 underline underline-offset-2 inline-flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> Try again
+                </button>
+                <button
+                  onClick={() => handleConnect(PROVIDERS[0])}
+                  className="text-xs font-medium text-amber-800 hover:text-amber-900 underline underline-offset-2"
+                >
+                  Reconnect
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <p className="text-[11px] font-semibold tracking-wide text-primary mb-2">TODAY</p>
         {schedule.today.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing on your calendar today.</p>
+          <p className="text-sm text-muted-foreground">
+            {schedule.status === "fetch_error" ? "Calendar events aren't loading right now." : "Nothing on your calendar today."}
+          </p>
         ) : (
           <ul className="space-y-1.5">
             {schedule.today.map((e, i) => (

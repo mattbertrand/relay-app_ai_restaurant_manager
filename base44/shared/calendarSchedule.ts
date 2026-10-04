@@ -102,21 +102,67 @@ async function fetchGoogleEvents(accessToken, timeMin, timeMax) {
     "https://www.googleapis.com/calendar/v3/calendars/primary/events" +
     `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
     "&singleEvents=true&orderBy=startTime&maxResults=100";
+  console.log(`[Relay Calendar] Fetching events from Google Calendar API`);
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!res.ok) throw new Error(`Google Calendar request failed (${res.status})`);
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = (body && body.error && body.error.message) || "";
+    } catch (e) { /* non-JSON error body */ }
+    console.error(`[Relay Calendar] Events request failed: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`);
+    const err = new Error(detail || `Google Calendar request failed (${res.status})`);
+    err.httpStatus = res.status;
+    err.detail = detail;
+    throw err;
+  }
   const data = await res.json();
+  console.log(`[Relay Calendar] Events request ok — ${((data && data.items) || []).length} events in window`);
   return data.items || [];
 }
 
-// For the Today dashboard: connection state + the schedule. Never throws —
-// a missing connection or an unreachable provider is simply "not connected".
+// A failed events fetch on a LIVE connection is a calendar-data problem, not
+// a disconnected calendar. Turn the provider error into plain language — a
+// 403 "API not enabled" is the most common post-authorization failure.
+function calendarFetchErrorMessage(err) {
+  const status = err && err.httpStatus;
+  const detail = (err && err.detail) || "";
+  if (status === 403 && /disabled|has not been used in project|permission/i.test(detail)) {
+    return "The Google Calendar API isn't enabled for this connection's Google Cloud project. Enable the Google Calendar API in the Google Cloud Console, then refresh — no reconnection is needed.";
+  }
+  if (status === 401) {
+    return "Google reports this connection's access has expired or was revoked. Reconnect your calendar and try again.";
+  }
+  if (status === 404) {
+    return "Google couldn't find the primary calendar for this account.";
+  }
+  if (status && status >= 500) {
+    return `Google Calendar is temporarily unavailable (HTTP ${status}). Try again in a moment.`;
+  }
+  return detail || `Google Calendar returned an error (HTTP ${status || "unknown"}).`;
+}
+
+// For the Today dashboard: connection state + the schedule. Never throws.
+// A missing connection is "not connected"; a LIVE connection whose events
+// fetch fails is "connected" with a calendar-data error — the two are never
+// conflated, so a fetch failure can never turn a connected calendar into a
+// "Connect Calendar" prompt.
 export async function calendarScheduleContext(base44, timezone) {
   const tz = timezone || "America/Los_Angeles";
   const todayISO = dayFmt(tz).format(new Date());
+
+  let accessToken = null;
   try {
-    const { accessToken } = await base44.asServiceRole.connectors.getCurrentAppUserConnection(
+    ({ accessToken } = await base44.asServiceRole.connectors.getCurrentAppUserConnection(
       GOOGLE_CALENDAR_CONNECTOR_ID
-    );
+    ));
+    console.log("[Relay Calendar] App-user connection found for Google Calendar");
+  } catch (e) {
+    console.log("[Relay Calendar] No app-user connection — showing Connect Calendar state");
+    return { connected: false };
+  }
+
+  try {
     const items = await fetchGoogleEvents(
       accessToken,
       new Date().toISOString(),
@@ -126,6 +172,7 @@ export async function calendarScheduleContext(base44, timezone) {
     const summary = summarizeSchedule(events, todayISO);
     return {
       connected: true,
+      status: "ok",
       provider: "google_calendar",
       provider_label: "Google",
       today: summary.today,
@@ -133,7 +180,18 @@ export async function calendarScheduleContext(base44, timezone) {
       scheduled_today: summary.today.length,
     };
   } catch (e) {
-    return { connected: false };
+    const message = calendarFetchErrorMessage(e);
+    console.error("[Relay Calendar] Calendar is CONNECTED but events could not be loaded —", message);
+    return {
+      connected: true,
+      status: "fetch_error",
+      provider: "google_calendar",
+      provider_label: "Google",
+      today: [],
+      week: [],
+      scheduled_today: 0,
+      error_message: message,
+    };
   }
 }
 
