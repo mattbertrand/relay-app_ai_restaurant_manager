@@ -26,6 +26,36 @@ import { calendarAnalysisContext } from "../../shared/calendarSchedule.ts";
 const MAX_MESSAGES = 20;
 const MAX_ANALYZE = 6;
 
+// The UTC timestamp of local midnight "today" in an IANA timezone — what
+// "Today" means for the initial import (the current calendar day, never the
+// last 24 hours). Falls back to UTC when no timezone is configured.
+function localMidnightMs(timezone) {
+  const tz = timezone || "UTC";
+  const dateStr = new Date().toLocaleDateString("en-CA", { timeZone: tz });
+  let t = new Date(`${dateStr}T00:00:00Z`).getTime();
+  for (let i = 0; i < 3; i++) {
+    const parts = {};
+    for (const { type, value } of new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).formatToParts(new Date(t))) {
+      parts[type] = value;
+    }
+    const asUTC = new Date(
+      `${parts.year}-${parts.month}-${parts.day}T${parts.hour === "24" ? "00" : parts.hour}:${parts.minute}:${parts.second}Z`
+    ).getTime();
+    if (!asUTC) break;
+    t += t - asUTC;
+  }
+  return t;
+}
+
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -46,13 +76,40 @@ export default async function(req) {
 
     const restaurant = await base44.entities.Restaurant.get(restaurantId);
 
+    // CONNECTION AND SYNCHRONIZATION ARE SEPARATE EVENTS. A Gmail account
+    // that has never had an explicit initial synchronization — the manager's
+    // Communication → Sync choice of how much history to import — is imported
+    // ONLY by that explicit initial import. Never by opening the Inbox, a
+    // reconnect, returning from OAuth, or any routine sync call. This guard
+    // is the single place that stops an uninitialized connection from
+    // silently ingesting mail.
+    const payload = await req.json().catch(() => ({}));
+    const isBackfill = payload.initial_import === true;
+    let gmailSetup = restaurant.gmail_setup && typeof restaurant.gmail_setup === "object" ? { ...restaurant.gmail_setup } : null;
+    if (!isBackfill && !(gmailSetup && gmailSetup.completed_at)) {
+      return Response.json({
+        connected: true,
+        initialized: false,
+        gmail_setup: gmailSetup,
+        newMessages: 0,
+        analyzed: 0,
+      });
+    }
+
+    // Verified restaurant knowledge and this restaurant's manager corrections
+    // steer the analysis: facts the manager entered are authoritative, and a
+    // rule learned from one restaurant never affects another restaurant.
+    // Loaded before the backfill window is computed — the restaurant's
+    // timezone defines what "Today" means for the initial import.
+    const [knowledgeRecord, feedback] = await Promise.all([
+      loadKnowledge(base44, restaurantId),
+      loadRecentFeedback(base44, restaurantId),
+    ]);
+
     // Initial-import configuration — the manager's choice of how much
     // existing email to analyze when Gmail is first connected. Stored on this
     // restaurant's record only; it controls the initial backfill exclusively
     // and is never applied as a permanent Gmail filter.
-    const payload = await req.json().catch(() => ({}));
-    const isBackfill = payload.initial_import === true;
-    let gmailSetup = restaurant.gmail_setup && typeof restaurant.gmail_setup === "object" ? { ...restaurant.gmail_setup } : null;
     let backfillActive = false;
     let windowStartMs = null;
 
@@ -80,27 +137,17 @@ export default async function(req) {
         completed_at: null,
       };
       await base44.entities.Restaurant.update(restaurantId, { gmail_setup: gmailSetup });
-      if (chosenWindow === "now") {
-        // Starting now: no history import at all — only mail arriving from
-        // this point on is monitored, exactly like every later sync.
-        const completed = { ...gmailSetup, completed_at: new Date().toISOString() };
-        await base44.entities.Restaurant.update(restaurantId, { gmail_setup: completed });
-        return Response.json({ connected: true, initial_import: { done: true, window: chosenWindow, imported: 0, analyzed: 0 } });
-      }
+      // "Today" means the current calendar day — from local midnight in the
+      // restaurant's timezone to now — never the last 24 hours. The backfill
+      // matches each message's own received timestamp, so a brand-new message
+      // in a months-old Gmail thread is still included.
       backfillActive = true;
       windowStartMs =
+        chosenWindow === "now" ? localMidnightMs(knowledgeRecord ? knowledgeRecord.timezone : null) :
         chosenWindow === "7d" ? Date.now() - 7 * 24 * 60 * 60 * 1000 :
         chosenWindow === "30d" ? Date.now() - 30 * 24 * 60 * 60 * 1000 :
         new Date(`${fromDate}T00:00:00Z`).getTime();
     }
-
-    // Verified restaurant knowledge and this restaurant's manager corrections
-    // steer the analysis: facts the manager entered are authoritative, and a
-    // rule learned from one restaurant never affects another restaurant.
-    const [knowledgeRecord, feedback] = await Promise.all([
-      loadKnowledge(base44, restaurantId),
-      loadRecentFeedback(base44, restaurantId),
-    ]);
     const knowledgeContext = formatKnowledgeForPrompt(knowledgeRecord);
     const corrections = formatCorrectionsForPrompt(feedback);
 
@@ -599,10 +646,20 @@ export default async function(req) {
       const leftoverToAnalyze = Math.max(0, analyzeOrder.length - MAX_ANALYZE);
       const done = !listPageToken && !hitCap && leftoverToAnalyze === 0;
       if (done && gmailSetup && !gmailSetup.completed_at) {
-        const completed = { ...gmailSetup, completed_at: new Date().toISOString() };
-        await base44.entities.Restaurant.update(restaurantId, { gmail_setup: completed });
+        gmailSetup = { ...gmailSetup, completed_at: new Date().toISOString() };
+        await base44.entities.Restaurant.update(restaurantId, { gmail_setup: gmailSetup });
       }
       summary.initial_import = { window: gmailSetup ? gmailSetup.window : null, done, remaining: !done };
+    }
+
+    // Record the successful sync time — the Communication page shows
+    // "Last synced" from it. Best-effort; never fails the sync.
+    if (gmailSetup) {
+      try {
+        await base44.entities.Restaurant.update(restaurantId, {
+          gmail_setup: { ...gmailSetup, last_sync_at: new Date().toISOString() },
+        });
+      } catch (e) { /* best effort */ }
     }
 
     return Response.json(summary);

@@ -39,7 +39,11 @@ const INTEGRATIONS = [
 export default function Settings() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState("Restaurant");
+  const [tab, setTab] = useState(() => {
+    // Deep links like /settings?tab=Communication (e.g. the Inbox's "Sync Emails")
+    const t = new URLSearchParams(window.location.search).get("tab");
+    return TABS.some((x) => x.label === t) ? t : "Restaurant";
+  });
   const [restaurant, setRestaurant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

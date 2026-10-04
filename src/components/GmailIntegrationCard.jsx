@@ -37,6 +37,14 @@ function summaryText(summary) {
   return parts.join(" · ") + ".";
 }
 
+function lastSyncLabel(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return `Today, ${time}`;
+  return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${time}`;
+}
+
 function reprocessText(summary) {
   if (!summary) return "";
   const parts = [];
@@ -97,7 +105,10 @@ export default function GmailIntegrationCard() {
     setSyncSummary(null);
     try {
       const res = await base44.functions.invoke("gmailSync", {});
-      setSyncSummary(res.data);
+      const s = res.data || {};
+      // An uninitialized account is never imported from a routine sync — the
+      // manager chooses the initial import in the setup step below.
+      setSyncSummary(s.initialized === false ? { notInitialized: true } : s);
     } catch (err) {
       setSyncSummary({ error: `Gmail sync failed: ${errorDetail(err)}` });
     } finally {
@@ -233,7 +244,7 @@ export default function GmailIntegrationCard() {
           </div>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             {connected
-              ? `Connected${status.email ? ` as ${status.email}` : ""}. Incoming customer emails are imported into your Inbox and reviewed for opportunities. Nothing is ever sent to customers without your approval.`
+              ? `Connected${status.email ? ` as ${status.email}` : ""}.${setupDone ? " Incoming customer emails are imported into your Inbox and reviewed for opportunities." : " Choose how much email history to import below — Relay won't import anything until you do."} Nothing is ever sent to customers without your approval.`
               : "Connect your restaurant's Gmail inbox to receive customer emails in Relay. You'll choose how much recent email history Relay reviews during setup. Nothing is ever sent to customers without your approval."}
           </p>
 
@@ -302,6 +313,12 @@ export default function GmailIntegrationCard() {
               Initial email history: {initialImportLabel(status.gmail_setup)}
             </p>
           )}
+          {connected && setupDone && status.last_synced_at && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Last synced: {lastSyncLabel(status.last_synced_at)}
+              {status.imported_count != null ? ` · Messages imported: ${status.imported_count}` : ""}
+            </p>
+          )}
 
           {syncSummary && syncSummary.error && (
             <p className="text-xs text-destructive mt-2">{syncSummary.error}</p>
@@ -309,8 +326,14 @@ export default function GmailIntegrationCard() {
           {syncSummary && !syncSummary.error && syncSummary.connected === false && (
             <p className="text-xs text-amber-600 mt-2">Gmail is not connected. Reconnect to resume syncing.</p>
           )}
-          {syncSummary && !syncSummary.error && syncSummary.connected !== false && (
+          {syncSummary && !syncSummary.error && !syncSummary.notInitialized && syncSummary.connected !== false && (
             <p className="text-xs text-muted-foreground mt-2">{summaryText(syncSummary)}</p>
+          )}
+          {syncSummary && syncSummary.notInitialized && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Gmail is connected, but the initial import hasn't been chosen yet — Relay won't import anything until you
+              select how much email to import.
+            </p>
           )}
           {reanalyzeSummary && reanalyzeSummary.error && (
             <p className="text-xs text-destructive mt-2">{reanalyzeSummary.error}</p>

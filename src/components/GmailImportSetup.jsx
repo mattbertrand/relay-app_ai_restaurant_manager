@@ -5,15 +5,15 @@ import { Loader2 } from "lucide-react";
 
 const OPTIONS = [
   {
-    value: "7d",
-    label: "Past 7 days",
+    value: "now",
+    label: "Today",
     recommended: true,
-    description: "Recommended for most restaurants. Includes recent conversations that may still need attention.",
+    description: "Recommended. Imports only emails received today, since midnight in your restaurant's time zone.",
   },
   {
-    value: "now",
-    label: "Starting now",
-    description: "Only new emails received after Relay is connected.",
+    value: "7d",
+    label: "Past 7 days",
+    description: "Includes the past week of conversations that may still need attention.",
   },
   {
     value: "30d",
@@ -30,7 +30,7 @@ const OPTIONS = [
 // A short human-readable label for the stored initial-import choice.
 export function initialImportLabel(setup) {
   if (!setup || !setup.window) return null;
-  if (setup.window === "now") return "Starting now";
+  if (setup.window === "now") return "Today";
   if (setup.window === "7d") return "Past 7 days";
   if (setup.window === "30d") return "Past 30 days";
   if (setup.window === "custom" && setup.from_date) {
@@ -44,7 +44,7 @@ export function initialImportLabel(setup) {
 }
 
 export default function GmailImportSetup({ initialSelection, importing, progress, onImport }) {
-  const [choice, setChoice] = useState(initialSelection?.window || "7d");
+  const [choice, setChoice] = useState(initialSelection?.window || "now");
   const [fromDate, setFromDate] = useState(initialSelection?.from_date || "");
 
   if (importing) {
@@ -130,7 +130,7 @@ export default function GmailImportSetup({ initialSelection, importing, progress
         onClick={() => onImport(choice, fromDate)}
         disabled={choice === "custom" && !fromDate}
       >
-        {choice === "now" ? "Continue without importing" : "Start initial import"}
+        Start initial import
       </Button>
     </div>
   );

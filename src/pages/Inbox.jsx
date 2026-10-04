@@ -8,7 +8,8 @@ import ConversationCard from "@/components/ConversationCard";
 import { Button } from "@/components/ui/button";
 import { conversationGroupKey, pickPrimaryConversation } from "@/lib/dedupe";
 import CorrectionDialog from "@/components/CorrectionDialog";
-import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { htmlToPlainText } from "@/lib/draftText";
 
@@ -39,6 +40,9 @@ export default function Inbox() {
   const [analysisFilter, setAnalysisFilter] = useState(null);
   const [correcting, setCorrecting] = useState(null);
   const [replyBusy, setReplyBusy] = useState(false);
+  // Gmail connected but never initialized: the manager must explicitly choose
+  // the initial import on the Communication page — nothing imports from here.
+  const [needsSetup, setNeedsSetup] = useState(false);
   const syncedRef = useRef(false);
   const location = useLocation();
   const scrollPosRef = useRef(0);
@@ -67,7 +71,14 @@ export default function Inbox() {
           if (!silent) {
             setLastSync({ error: "Gmail is not connected. Connect Gmail in Settings → Communication." });
           }
+        } else if (data && data.initialized === false) {
+          // Gmail is connected but the manager has never chosen an initial
+          // import — Relay never imports anything from here. The manager
+          // starts from the Communication page.
+          setNeedsSetup(true);
+          setLastSync(null);
         } else {
+          setNeedsSetup(false);
           setLastSync({ summary: data });
           loadData();
         }
@@ -297,7 +308,7 @@ export default function Inbox() {
         <Button variant="outline" size="sm" onClick={() => runSync(false)} disabled={syncing}>
           {syncing ? (
             <>
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Analyzing…
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Syncing…
             </>
           ) : (
             <>
@@ -306,6 +317,24 @@ export default function Inbox() {
           )}
         </Button>
       </div>
+
+      {needsSetup && (
+        <div className="mb-6 rounded-xl border border-border bg-card p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Mail className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Gmail connected — nothing imported yet</p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Your Gmail account is connected, but Relay hasn't imported any messages yet. Go to Communication and choose
+              Sync to select which emails Relay should import.
+            </p>
+            <Button size="sm" className="mt-3" asChild>
+              <Link to="/settings?tab=Communication">Sync Emails</Link>
+            </Button>
+          </div>
+        </div>
+      )}
 
       {hasDemo && source !== "gmail" && <div className="mb-6"><DemoBanner /></div>}
 
@@ -384,9 +413,11 @@ export default function Inbox() {
           icon={InboxIcon}
           title="No conversations here"
           description={
-            source === "gmail"
-              ? "Connect Gmail and sync — your live customer emails will appear here."
-              : "When you connect your email and other channels, customer messages will appear here."
+            needsSetup
+              ? "Your Gmail account is connected, but no messages have been imported yet. Choose Sync Emails above to import your first messages."
+              : source === "gmail"
+                ? "Connect Gmail and sync — your live customer emails will appear here."
+                : "When you connect your email and other channels, customer messages will appear here."
           }
         />
       ) : (
