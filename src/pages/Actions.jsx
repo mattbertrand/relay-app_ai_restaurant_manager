@@ -14,6 +14,7 @@ const FILTERS = ["All", "Pending Approval", "Approved", "Completed", "Dismissed"
 const ACTION_ICONS = {
   "Draft response": FileText,
   "Follow-up reminder": Bell,
+  "Follow-up": Bell,
   "Customer follow-up": User,
   "Opportunity review": CheckSquare,
 };
@@ -146,6 +147,13 @@ export default function Actions() {
                       )}
                     </div>
                     <p className="text-sm text-foreground mt-1">{action.description}</p>
+                    {action.type === "Follow-up" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {action.due_date
+                          ? `Due ${action.due_date}`
+                          : "Needs scheduling — no date was promised"}
+                      </p>
+                    )}
                     {opp && (
                       <div className="mt-2 text-xs text-muted-foreground">
                         Related: <span className="text-foreground font-medium">{opp.title}</span>

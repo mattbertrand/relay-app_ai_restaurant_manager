@@ -33,6 +33,9 @@ export default function Inbox() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
+  // Optional classification filter arriving from the Today dashboard
+  // (e.g. "Attention" when the manager taps "Immediate Attention").
+  const [analysisFilter, setAnalysisFilter] = useState(null);
   const [correcting, setCorrecting] = useState(null);
   const [replyBusy, setReplyBusy] = useState(false);
   const syncedRef = useRef(false);
@@ -93,6 +96,11 @@ export default function Inbox() {
       setFilter("All");
       setSource("all");
       return;
+    }
+    if (location.state?.analysisFilter) {
+      setFilter("All");
+      setSource("all");
+      setAnalysisFilter(location.state.analysisFilter);
     }
     try {
       const saved = JSON.parse(sessionStorage.getItem(INBOX_CONTEXT_KEY) || "null");
@@ -217,6 +225,19 @@ export default function Inbox() {
         description: `Reply recorded for ${convo.customer_name} — "${convo.subject}"`,
         is_demo: !!convo.is_demo,
       });
+      // The manager's actual response may commit to a follow-up ("I'll check
+      // with the kitchen and get back to you") — detect it only from this
+      // recorded reply, never from an unapproved draft. Best-effort: a
+      // detection failure never blocks or breaks the reply recording.
+      base44.functions
+        .invoke("detectFollowUp", {
+          conversation_id: convo.id,
+          opportunity_id: convo.opportunity_id || "",
+          reply_text: text,
+          subject: convo.subject,
+          customer_name: convo.customer_name,
+        })
+        .catch(() => {});
       loadData();
     } catch (err) {
       console.error(err);
@@ -227,11 +248,12 @@ export default function Inbox() {
 
   const filtered = (conversations || []).filter((c) => {
     const statusOk = filter === "All" || c.status === filter;
+    const analysisOk = !analysisFilter || c.analysis_status === analysisFilter;
     const sourceOk =
       source === "all" ||
       (source === "gmail" && c.source === "Gmail" && !c.is_demo) ||
       (source === "demo" && c.is_demo);
-    return statusOk && sourceOk;
+    return statusOk && analysisOk && sourceOk;
   });
   const hasDemo = (conversations || []).some((c) => c.is_demo);
   const isLive = (c) => c.source === "Gmail" && !c.is_demo;
@@ -316,6 +338,17 @@ export default function Inbox() {
           </button>
         ))}
       </div>
+
+      {analysisFilter && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/10 border border-primary/20 rounded-full px-3 py-1">
+            {analysisFilter}
+            <button onClick={() => setAnalysisFilter(null)} className="hover:opacity-70" aria-label="Clear filter">
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-5 -mx-1 px-1">
         {SOURCES.map((s) => (

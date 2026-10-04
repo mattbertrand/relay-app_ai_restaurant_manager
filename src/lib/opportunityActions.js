@@ -36,6 +36,17 @@ export async function approveResponse(opp) {
     type: "response_approved",
     description: `Response approved for ${opp.customer_name}'s ${(opp.type || "").toLowerCase()} — recorded in Relay, no external message was sent`,
   });
+
+  // The approved response is the manager's actual response — if it commits to
+  // a follow-up, record it. Best-effort; never blocks the approval.
+  base44.functions
+    .invoke("detectFollowUp", {
+      opportunity_id: opp.id,
+      reply_text: opp.draft_response || "",
+      subject: opp.title,
+      customer_name: opp.customer_name,
+    })
+    .catch(() => {});
 }
 
 export async function resolveOpportunity(opp, note) {

@@ -37,7 +37,7 @@ async function findOpportunity(base44, id) {
 // auto-created, untouched drafts are updated or removed; anything the manager
 // has already reviewed, edited, or approved is left alone. Each conversation is
 // analyzed strictly on its own merits — nothing is linked by sender.
-export async function reprocessConversations({ base44, restaurantId, restaurantName, convos, messages }) {
+export async function reprocessConversations({ base44, restaurantId, restaurantName, restaurantEmail, convos, messages }) {
   const opps = await base44.entities.Opportunity.filter({ restaurant_id: restaurantId }, null, 500);
   const [knowledgeRecord, feedback] = await Promise.all([
     loadKnowledge(base44, restaurantId),
@@ -137,10 +137,22 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     const threadMsgs = messages
       .filter((m) => m.conversation_id === convo.id)
       .sort((a, b) => new Date(a.received_at || 0).getTime() - new Date(b.received_at || 0).getTime());
-    // The latest message in the thread decides the analysis — a follow-up's new
-    // intent is what the manager needs to act on now.
-    const latest = threadMsgs[threadMsgs.length - 1];
+    // The latest message FROM THE CUSTOMER decides the analysis — a
+    // restaurant-side message in the thread (e.g. the manager's own reply) is
+    // never analyzed as if it were the customer's. The customer's identity
+    // comes from the incoming message itself, never from the manager.
+    const ownAddresses = new Set(
+      [restaurantEmail, knowledgeRecord ? knowledgeRecord.contact_email : null]
+        .map((e) => (e || "").toLowerCase().trim())
+        .filter(Boolean)
+    );
+    const customerMsgs = threadMsgs.filter(
+      (m) => !ownAddresses.has((m.sender_email || "").toLowerCase().trim())
+    );
+    const latest = customerMsgs[customerMsgs.length - 1] || threadMsgs[threadMsgs.length - 1];
     const body = latest ? latest.body : convo.message;
+    const senderName = (latest && (latest.sender_name || latest.sender_email)) || convo.customer_name;
+    const senderEmail = (latest && latest.sender_email) || convo.customer_email;
     // The Inbox preview shows the latest message of the thread — the same one
     // the analysis addresses — never a stale earlier message.
     const preview = { message: body.slice(0, 4000) };
@@ -148,8 +160,8 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
     let analysis;
     try {
       analysis = await analyzeEmail(base44, restaurantName, {
-        senderName: convo.customer_name,
-        senderEmail: convo.customer_email,
+        senderName,
+        senderEmail,
         subject: convo.subject,
         body,
       }, {
@@ -202,12 +214,17 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         value_basis: analysis.has_value_estimate ? analysis.value_basis : null,
         priority: analysis.priority || "medium",
         recommended_action: analysis.recommended_action || "Review and respond to this inquiry",
+        customer_name: senderName,
+        customer_email: senderEmail,
+        event_date: analysis.event_date || null,
         source: "Gmail",
         original_message: originalMessage.slice(0, 8000),
         why_identified:
           [analysis.customer_facts, analysis.relay_assessment, analysis.knowledge_used].filter(Boolean).join(" ") +
           ` Relay flagged this with ${analysis.confidence || "Medium"} confidence.`,
-        draft_response: analysis.draft_response || "",
+        // The new draft replaces the old only when one was actually generated —
+        // re-analysis never leaves the opportunity without its draft by accident.
+        draft_response: analysis.draft_response || (linkedOpp ? linkedOpp.draft_response || "" : ""),
         last_analyzed_at: new Date().toISOString(),
       };
 
@@ -218,8 +235,8 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       } else if (!linkedOpp) {
         const opp = await base44.entities.Opportunity.create({
           restaurant_id: restaurantId,
-          customer_name: convo.customer_name,
-          customer_email: convo.customer_email,
+          customer_name: senderName,
+          customer_email: senderEmail,
           status: "New",
           draft_status: "Draft",
           is_demo: false,
@@ -232,7 +249,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
             restaurant_id: restaurantId,
             opportunity_id: opp.id,
             type: "Draft response",
-            description: `Draft a response to ${convo.customer_name} regarding "${convo.subject}".`,
+            description: `Draft a response to ${senderName} regarding "${convo.subject}".`,
             status: "Pending Approval",
             requires_approval: true,
           });
@@ -268,7 +285,11 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         await base44.entities.Opportunity.delete(linkedOpp.id);
         summary.opportunitiesRemoved++;
       }
-      const outcome = conversationUpdatesFor(classification, analysis, { preserveManagerDraft: managerDraft });
+      const outcome = conversationUpdatesFor(classification, analysis, {
+        preserveManagerDraft: managerDraft,
+        previousDraft: convo.draft_response || "",
+        previousRelayDraft: convo.relay_draft || "",
+      });
       await base44.entities.Conversation.update(convo.id, {
         ...(dropLink ? { opportunity_id: "" } : {}),
         ...preview,

@@ -82,7 +82,7 @@ async function createActivityOnce(base44, entry) {
   await base44.entities.Activity.create(entry);
 }
 
-export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo, messages, confirm, reclassChoice }) {
+export async function reanalyzeOne(base44, { restaurantId, restaurantName, restaurantEmail, convo, messages, confirm, reclassChoice }) {
   if (!convo.analysis_status || convo.analysis_status === "Not analyzed") {
     return { error: "This message has not been analyzed yet." };
   }
@@ -105,12 +105,27 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
     loadRecentFeedback(base44, restaurantId),
   ]);
 
-  // Latest thread message — the same one the analysis addresses.
+  // Latest thread message — the same one the analysis addresses, but only a
+  // message FROM THE CUSTOMER: a restaurant-side message in the thread (e.g.
+  // the manager's own reply) is never analyzed as if it were the customer's.
+  const ownAddresses = new Set(
+    [restaurantEmail, knowledge ? knowledge.contact_email : null]
+      .map((e) => (e || "").toLowerCase().trim())
+      .filter(Boolean)
+  );
   const threadMsgs = (messages || [])
     .filter((m) => m.conversation_id === convo.id)
     .sort((a, b) => new Date(a.received_at || 0).getTime() - new Date(b.received_at || 0).getTime());
-  const latest = threadMsgs[threadMsgs.length - 1];
+  const customerMsgs = threadMsgs.filter(
+    (m) => !ownAddresses.has((m.sender_email || "").toLowerCase().trim())
+  );
+  const latest = customerMsgs[customerMsgs.length - 1] || threadMsgs[threadMsgs.length - 1];
   const body = latest ? latest.body : convo.message;
+  // The customer's identity always comes from the incoming message itself —
+  // Gmail sender display name first, then the sender email, then the stored
+  // conversation name. Never the logged-in manager's name.
+  const senderName = (latest && (latest.sender_name || latest.sender_email)) || convo.customer_name;
+  const senderEmail = (latest && latest.sender_email) || convo.customer_email;
 
   // Did Restaurant Knowledge change since this analysis was generated?
   const knowledgeChanged = !!(
@@ -123,8 +138,8 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
   const classificationBefore = convo.analysis_status;
 
   const analysis = await analyzeEmail(base44, restaurantName, {
-    senderName: convo.customer_name,
-    senderEmail: convo.customer_email,
+    senderName,
+    senderEmail,
     subject: convo.subject,
     body,
   }, {
@@ -167,13 +182,22 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
       value_basis: analysis.has_value_estimate ? analysis.value_basis : null,
       priority: analysis.priority || "medium",
       recommended_action: analysis.recommended_action || "Review and respond to this inquiry",
+      customer_name: senderName,
+      customer_email: senderEmail,
+      event_date: analysis.event_date || null,
       source: convo.source || "Gmail",
       original_message: `Subject: ${convo.subject}\n\n${body}`.slice(0, 8000),
       why_identified:
         [analysis.customer_facts, analysis.relay_assessment, analysis.knowledge_used].filter(Boolean).join(" ") +
         ` Relay flagged this with ${analysis.confidence || "Medium"} confidence.`,
-      draft_response: analysis.draft_response || "",
-      draft_status: "Draft",
+      // The new draft replaces the old only when one was actually generated —
+      // re-analysis never leaves the opportunity without its draft by accident.
+      draft_response: analysis.draft_response || (opportunity ? opportunity.draft_response || "" : ""),
+      draft_status: analysis.draft_response
+        ? "Draft"
+        : opportunity
+        ? opportunity.draft_status || "Draft"
+        : "Draft",
       previous_analysis: snapshot,
       last_analyzed_at: now,
     };
@@ -283,8 +307,12 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
         description: analysis.description || analysis.why_flagged,
         priority: analysis.priority || "medium",
         recommended_action: analysis.recommended_action || "Review and respond to this inquiry",
-        draft_response: analysis.draft_response || "",
-        draft_status: "Draft",
+        customer_name: senderName,
+        customer_email: senderEmail,
+        event_date: analysis.event_date || null,
+        // Preserve the existing draft when the new analysis generates none.
+        draft_response: analysis.draft_response || (opportunity.draft_response || ""),
+        draft_status: analysis.draft_response ? "Draft" : (opportunity.draft_status || "Draft"),
         previous_analysis: snapshot,
         last_analyzed_at: now,
       };
@@ -300,7 +328,10 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
       summary.opportunityUpdated = true;
       if (refreshed.draft_response) summary.draftReplaced = true;
     }
-    const outcome = conversationUpdatesFor(classification, analysis);
+    const outcome = conversationUpdatesFor(classification, analysis, {
+      previousDraft: convo.draft_response || "",
+      previousRelayDraft: convo.relay_draft || "",
+    });
     await base44.entities.Conversation.update(convo.id, {
       ...(oppId === "" ? { opportunity_id: "" } : {}),
       message: body.slice(0, 4000),

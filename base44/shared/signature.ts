@@ -17,7 +17,7 @@ export function ensureSingleSignature(draft, signature) {
   for (let i = 0; i <= lines.length - sigLines.length; i++) {
     let ok = true;
     for (let j = 0; j < sigLines.length; j++) {
-      if (lines[i + j].trim() !== sigLines[j]) { ok = false; break; }
+      if (lines[i + j].trim().toLowerCase() !== sigLines[j].toLowerCase()) { ok = false; break; }
     }
     if (ok) matches.push(i);
   }

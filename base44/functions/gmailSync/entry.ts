@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.49';
 import {
   GMAIL_CONNECTOR_ID,
+  getGmailProfile,
   listInboxMessages,
   fetchMessage,
   getHeader,
@@ -142,6 +143,7 @@ export default async function(req) {
         base44,
         restaurantId,
         restaurantName: restaurant.name || 'the restaurant',
+        restaurantEmail: restaurant.email || '',
         convos,
         messages: existingMsgs,
       });
@@ -186,7 +188,18 @@ export default async function(req) {
     const maxMessages = backfillActive ? 30 : MAX_MESSAGES;
 
     const toAnalyze = [];
-    const ownEmails = [restaurant.email]
+    // The restaurant's own mail — both the configured restaurant address and
+    // the connected Gmail account itself — is never imported or analyzed. This
+    // keeps the manager's own outbound replies out of the inbox and out of
+    // re-analysis, so the customer's identity always comes from the incoming
+    // message, never from a restaurant-side sender.
+    let gmailAddress = null;
+    try {
+      gmailAddress = await getGmailProfile(accessToken);
+    } catch (e) {
+      // Profile lookup is best-effort; the restaurant's configured address still applies.
+    }
+    const ownEmails = [restaurant.email, gmailAddress]
       .map((e) => (e || '').toLowerCase())
       .filter(Boolean);
 

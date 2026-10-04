@@ -39,9 +39,11 @@ export default async function(req) {
     }
 
     let restaurantName = 'the restaurant';
+    let restaurantEmail = '';
     try {
       const restaurant = await base44.entities.Restaurant.get(restaurantId);
       if (restaurant && restaurant.name) restaurantName = restaurant.name;
+      if (restaurant && restaurant.email) restaurantEmail = restaurant.email;
     } catch (e) {
       // fall back to the default name
     }
@@ -55,6 +57,7 @@ export default async function(req) {
     const result = await reanalyzeOne(base44, {
       restaurantId,
       restaurantName,
+      restaurantEmail,
       convo,
       messages,
       confirm: payload.confirm === true,

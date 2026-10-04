@@ -73,6 +73,11 @@
     "why_identified": {
       "type": "string"
     },
+    "event_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The explicit calendar date (YYYY-MM-DD) the customer stated for their event, reservation, or request. Empty when no date is stated, when only a weekday is given, or when the date is ambiguous or impossible \u2014 never invented."
+    },
     "last_analyzed_at": {
       "type": "string",
       "format": "date-time",

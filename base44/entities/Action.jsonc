@@ -8,6 +8,10 @@
     "opportunity_id": {
       "type": "string"
     },
+    "conversation_id": {
+      "type": "string",
+      "description": "The conversation (email thread) this action belongs to, when the action is tied to a specific message."
+    },
     "type": {
       "type": "string"
     },
@@ -20,6 +24,11 @@
     "requires_approval": {
       "type": "boolean",
       "default": true
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "When this follow-up is due, when the manager stated a date in their response. Empty means the follow-up still needs scheduling \u2014 never an invented date."
     },
     "completed_at": {
       "type": "string",
