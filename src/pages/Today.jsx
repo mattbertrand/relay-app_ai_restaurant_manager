@@ -68,7 +68,6 @@ export default function Today() {
       {data.has_demo && <div className="mb-6"><DemoBanner /></div>}
 
       <ScheduleSection schedule={data.schedule} onScheduleChanged={loadData} />
-      <NeedsActionSection items={data.need_action} count={data.counts.need_action} />
       <NewEmailsSection emails={data.emails} />
       <ReviewsSection reviews={data.reviews} />
       <UpcomingSection
@@ -76,6 +75,7 @@ export default function Today() {
         upcomingItems={data.upcoming_items}
         upcomingAll={data.upcoming_all}
       />
+      <NeedsActionSection items={data.need_action} count={data.counts.need_action} />
     </div>
   );
 }
