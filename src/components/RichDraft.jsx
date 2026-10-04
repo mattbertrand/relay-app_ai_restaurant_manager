@@ -11,7 +11,7 @@ export default function RichDraft({ text, className, emptyLabel = "No draft prep
     return <div className={cn("whitespace-pre-line", className)}>{emptyLabel}</div>;
   }
   if (isHtmlDraft(text)) {
-    return <div className={cn("draft-rich", className)} dangerouslySetInnerHTML={{ __html: text }} />;
+    return <div className={cn("draft-rich min-w-0", className)} dangerouslySetInnerHTML={{ __html: text }} />;
   }
-  return <div className={cn("whitespace-pre-line", className)}>{text}</div>;
+  return <div className={cn("whitespace-pre-line break-words min-w-0", className)}>{text}</div>;
 }

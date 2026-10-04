@@ -10,6 +10,7 @@ import {
   formatKnowledgeForPrompt,
   formatAdminContextForPrompt,
   formatCorrectionsForPrompt,
+  formatResponseTemplatesForPrompt,
 } from "./restaurantKnowledge.ts";
 
 // Safety cap per run — Gmail re-analysis makes one model call per message, so
@@ -159,6 +160,7 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
           body,
         }),
         corrections,
+        templatesContext: formatResponseTemplatesForPrompt(knowledgeRecord),
         timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
         signature: knowledgeRecord && knowledgeRecord.email_signature ? knowledgeRecord.email_signature : null,
       });

@@ -122,6 +122,52 @@
       "type": "string",
       "description": "Other verified information Relay should know about this restaurant."
     },
+    "response_templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "inquiry_category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "when_to_use": {
+            "type": "string"
+          },
+          "response_guidance": {
+            "type": "string"
+          },
+          "info_to_collect": {
+            "type": "string"
+          },
+          "recommended_next_action": {
+            "type": "string"
+          },
+          "handoff_to": {
+            "type": "string"
+          },
+          "handoff_contact": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "description": "Restaurant-specific response templates for common inquiries (e.g. Dine & Donate requests, private events, ADA seating, catering, sponsorship). Guidance for Relay's analysis, recommended next action, and draft generation \u2014 never automatic sending or forwarding."
+    },
+    "review_policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional restaurant-specific review attention/response policy (e.g. Google: manager attention for 1\u20132 star reviews, positive reviews informational; Yelp: monitor only). Foundation for restaurant-specific review handling \u2014 the Review Source architecture stays provider-agnostic and Relay never assumes every review needs a response."
+    },
     "hr": {
       "type": "object",
       "additionalProperties": true,

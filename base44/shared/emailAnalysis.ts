@@ -3,6 +3,7 @@
 
 import { detectDateIssue } from "./dateChecks.ts";
 import { ensureSingleSignature } from "./signature.ts";
+import { normalizeDraftParagraphs } from "./draftFormatting.ts";
 
 const ANALYSIS_SCHEMA = {
   type: "object",
@@ -88,7 +89,7 @@ export function opportunityTypeFor(category) {
 // the analysis prompt change. Every analyzed conversation is stamped with it,
 // so re-analysis runs skip messages already classified by the current rules
 // and only pick up stale ones (idempotent — no repeated activity noise).
-export const ANALYSIS_VERSION = 6;
+export const ANALYSIS_VERSION = 7;
 
 export const CLASSIFICATION_LABELS = {
   opportunity: "Opportunity",
@@ -125,6 +126,7 @@ export function conversationUpdatesFor(classification, analysis = {}, options = 
   // which verified restaurant facts it used (or that the profile lacks them).
   if (analysis.why_flagged) updates.why_flagged = analysis.why_flagged;
   if (analysis.knowledge_used) updates.knowledge_used = analysis.knowledge_used;
+  if (analysis.recommended_action) updates.recommended_action = analysis.recommended_action;
   if (options.preserveManagerDraft) {
     // The manager edited (or already recorded) this draft — it is
     // manager-controlled content and is never silently overwritten.
@@ -223,6 +225,13 @@ MANAGER CORRECTIONS FOR THIS RESTAURANT (learned from this restaurant manager's 
 ${corrections.join("\n")}`
     : "";
 
+  const templatesBlock = options.templatesContext
+    ? `
+
+RESPONSE TEMPLATES (defined by this restaurant's manager — how THIS restaurant handles common inquiries; when one matches this message, follow its guidance for the draft, collect the information it lists from the customer, and use its recommended next action — including any handoff — in recommended_action. Relay recommends the handoff; it never sends or forwards anything itself.)
+${options.templatesContext}`
+    : "";
+
   const prompt = `You are reviewing one incoming email for "${restaurantName}", a restaurant. Relay's promise to the restaurant is: "Never let another customer opportunity fall through the cracks." Your job is to understand the sender's actual intent and decide how much of the manager's attention it deserves. Do not just match keywords — read the message the way a thoughtful manager would.
 
 Each email is analyzed on its own merits. The same customer may have many completely separate matters — judge THIS message by what THIS message says, never by who sent it.
@@ -231,7 +240,7 @@ THREE SOURCES OF INFORMATION — keep them strictly separate and never blur them
 1. VERIFIED RESTAURANT INFORMATION (below): facts the manager entered or confirmed. This is authoritative for restaurant-specific facts. Never contradict it. When you use one of these facts, say so (e.g. "The restaurant profile states a maximum standard party size of 10.").
 2. CUSTOMER-PROVIDED INFORMATION: only what the customer actually wrote (e.g. "The customer is asking about a party of 18.").
 3. YOUR INFERENCE: reasoning that combines the two (e.g. "This appears to be a private-event inquiry."). Never present an inference as a verified restaurant fact, and never invent restaurant facts at all.
-${knowledgeBlock}${adminBlock}${correctionsBlock}${dateBlock}${detectedBlock}${signatureBlock}
+${knowledgeBlock}${adminBlock}${correctionsBlock}${templatesBlock}${dateBlock}${detectedBlock}${signatureBlock}
 
 EMAIL
 From: ${email.senderName} <${email.senderEmail}>
@@ -294,8 +303,8 @@ HOW TO DECIDE
 8. why_flagged: 1-2 factual sentences combining what the customer asked for, why it matters, and — when one applies — the verified restaurant fact it relates to (e.g. "The restaurant profile states a maximum standard party size of 10."). Never mention AI, models, algorithms, or technology.
 9. knowledge_used: the verified facts from the profile that apply to this message, or a plain statement that the profile does not contain the needed information. Never list facts you inferred or invented.
 10. recommended_action: one specific action tied to the actual message. Empty string when classification is routine or spam.
-11. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Structure it like a short real email: a greeting addressed to the sender by name (e.g. "Hi Dana,"), one to three short body paragraphs separated by blank lines, and a closing line such as "Best," at the end — never one solid block of text. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT PROFILE — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. For administrative messages, write a short factual draft ONLY when the verified Restaurant Profile (including the administration context) answers the sender's question — e.g. verified application instructions or a known vendor's process — and never confirm an interview, an application status, an order, or a payment the profile does not state; otherwise leave it empty. Empty string when classification is routine or spam.
-12. priority: high for customer_service, reservation_issue, time-sensitive requests, and large or high-value opportunities; medium for clear opportunities with specifics; low otherwise.
+11. draft_response: a short, professional reply from the restaurant to this customer, signed with "${restaurantName}". Write it when classification is opportunity or attention. Structure it like a short real email with REAL line breaks: the greeting on its own line, a blank line between one to three short body paragraphs, and the closing line (e.g. "Best,") on its own line before the signature — never one solid block of text and never a single long line. Use ONLY facts from the customer's message and the VERIFIED RESTAURANT PROFILE — you may state verified hours, policies, and limits exactly as the profile gives them. Never invent prices, menu items, availability, discounts, catering packages, policies, or confirm a booking. If the profile lacks the fact the customer needs, do not state it — offer to confirm instead ("Let me confirm our Sunday hours for you") or ask for the missing details (event type, date, guest count, budget). If the customer's request conflicts with a verified fact (a time outside verified hours, a party larger than the standard maximum), state the verified fact and address the conflict directly rather than ignoring it — and never imply the request is accepted. Never claim an action was taken that Relay cannot take — no email was sent, no availability was checked, no reservation was confirmed, modified, or cancelled, and no third-party system was consulted; offer to review and follow up instead. For administrative messages, write a short factual draft ONLY when the verified Restaurant Profile (including the administration context) answers the sender's question — e.g. verified application instructions or a known vendor's process — and never confirm an interview, an application status, an order, or a payment the profile does not state; otherwise leave it empty. Empty string when classification is routine or spam.
+12. priority: high for customer_service, reservation_issue, time-sensitive requests, large or high-value opportunities, and customers reporting repeated unanswered contact attempts (a service failure — the customer has already tried more than once and is losing patience); medium for clear opportunities with specifics; low otherwise.
 
 Return JSON only.`;
 
@@ -311,7 +320,10 @@ Return JSON only.`;
   // Signature safety: every generated draft carries exactly one signature
   // block — never a second copy appended to a draft that already had one.
   if (result && result.draft_response) {
-    result.draft_response = ensureSingleSignature(result.draft_response, options.signature);
+    result.draft_response = ensureSingleSignature(
+      normalizeDraftParagraphs(result.draft_response, options.signature, restaurantName),
+      options.signature
+    );
   }
   return result;
 }

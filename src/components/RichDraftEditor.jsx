@@ -14,7 +14,7 @@ const MODULES = {
 export default function RichDraftEditor({ value, onChange }) {
   const htmlValue = isHtmlDraft(value) ? value : plainTextToHtml(value);
   return (
-    <div className="draft-editor bg-card rounded-lg border border-border overflow-hidden">
+    <div className="draft-editor bg-card rounded-lg border border-border overflow-hidden w-full min-w-0">
       <ReactQuill theme="snow" value={htmlValue} onChange={onChange} modules={MODULES} />
     </div>
   );

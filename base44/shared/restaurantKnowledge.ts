@@ -251,6 +251,33 @@ export function formatCorrectionsForPrompt(feedback) {
   });
 }
 
+// Renders the restaurant's active response templates as prompt context —
+// restaurant-specific workflows for common inquiries (what Relay should ask,
+// what it can answer immediately, and when to hand off to another person).
+// Manager guidance only: templates never send or forward anything.
+export function formatResponseTemplatesForPrompt(knowledge) {
+  const templates = Array.isArray(knowledge && knowledge.response_templates)
+    ? knowledge.response_templates.filter((t) => t && t.name && t.active !== false)
+    : [];
+  if (!templates.length) return null;
+  const blocks = templates.map((t) => {
+    const lines = [
+      `TEMPLATE: ${t.name}`,
+      t.inquiry_category ? `Inquiry type: ${t.inquiry_category}` : null,
+      t.description ? `What it covers: ${clipped(t.description, 300)}` : null,
+      t.when_to_use ? `When to use: ${clipped(t.when_to_use, 300)}` : null,
+      t.response_guidance ? `Response guidance: ${clipped(t.response_guidance, 800)}` : null,
+      t.info_to_collect ? `Information to collect from the customer: ${t.info_to_collect}` : null,
+      t.recommended_next_action ? `Recommended next action: ${t.recommended_next_action}` : null,
+      t.handoff_to
+        ? `Handoff (recommend only, never forward automatically): ${t.handoff_to}${t.handoff_contact ? ` — contact: ${t.handoff_contact}` : ""}`
+        : null,
+    ].filter(Boolean);
+    return lines.join("\n");
+  });
+  return blocks.join("\n\n");
+}
+
 // ---------------------------------------------------------------------------
 // RESTAURANT PROFILE — Administration & Operations context
 //

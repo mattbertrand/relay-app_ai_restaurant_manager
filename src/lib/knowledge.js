@@ -123,6 +123,12 @@ export function emptyKnowledge() {
     // public one for review responses.
     email_signature: "",
     review_signature: "",
+    // Restaurant-specific response templates — manager-defined guidance for
+    // common inquiries. Relay recommends; it never sends or forwards.
+    response_templates: [],
+    // Optional review attention/response policy — foundation for
+    // restaurant-specific review handling (e.g. Google vs Yelp).
+    review_policy: {},
     // Administration areas — trusted context Relay uses to understand
     // employment, vendor, invoice, and operational communications. Structured
     // so new areas can be added safely later.
@@ -195,6 +201,8 @@ export function knowledgeWithDefaults(record) {
     finance: { ...base.finance, ...(record.finance || {}) },
     operations: { ...base.operations, ...(record.operations || {}) },
     marketing: { ...base.marketing, ...(record.marketing || {}) },
+    response_templates: record.response_templates || [],
+    review_policy: { ...base.review_policy, ...(record.review_policy || {}) },
   };
 }
 

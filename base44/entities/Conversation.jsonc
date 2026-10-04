@@ -71,6 +71,10 @@
       "type": "string",
       "description": "Short phrase naming the customer's or sender's intent, e.g. 'Operating Hours', 'Reservation Request'."
     },
+    "recommended_action": {
+      "type": "string",
+      "description": "Relay's recommended next action for this message \u2014 the specific step the manager should take, including a recommended handoff when one of the restaurant's response templates calls for it. Never an automatic action."
+    },
     "draft_response": {
       "type": "string",
       "description": "The current reply draft for this message. Manager-controlled once edited \u2014 never silently overwritten by a newly generated draft."

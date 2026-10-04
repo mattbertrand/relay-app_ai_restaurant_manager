@@ -13,6 +13,7 @@ import {
   formatKnowledgeForPrompt,
   formatAdminContextForPrompt,
   formatCorrectionsForPrompt,
+  formatResponseTemplatesForPrompt,
 } from "./restaurantKnowledge.ts";
 
 // Readable snapshot of the analysis as it stands before a re-analysis —
@@ -134,6 +135,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, convo
       body,
     }),
     corrections: formatCorrectionsForPrompt(feedback),
+    templatesContext: formatResponseTemplatesForPrompt(knowledge),
     timezone: knowledge ? knowledge.timezone : null,
     signature: knowledge && knowledge.email_signature ? knowledge.email_signature : null,
   });

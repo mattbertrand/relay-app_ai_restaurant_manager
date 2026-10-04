@@ -16,6 +16,7 @@ import {
   formatKnowledgeForPrompt,
   formatAdminContextForPrompt,
   formatCorrectionsForPrompt,
+  formatResponseTemplatesForPrompt,
 } from "../../shared/restaurantKnowledge.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
 
@@ -461,6 +462,7 @@ export default async function(req) {
             body: item.body,
           }),
           corrections,
+          templatesContext: formatResponseTemplatesForPrompt(knowledgeRecord),
           timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
           signature: knowledgeRecord && knowledgeRecord.email_signature ? knowledgeRecord.email_signature : null,
         });

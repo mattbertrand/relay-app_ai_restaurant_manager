@@ -17,7 +17,8 @@ import { cn } from "@/lib/utils";
 // New → In Progress → Resolved lifecycle.
 export default function ConversationCard({ convo, isLive, highlighted, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy, onReanalyzed }) {
   const showActions = isLive;
-  const showDraft = isLive && convo.analysis_status === "Attention" && !!convo.draft_response;
+  const showDraft =
+    isLive && ["Attention", "Administrative"].includes(convo.analysis_status) && !!convo.draft_response;
   const hasAnalysis = isLive && !!convo.analysis_status && convo.analysis_status !== "Not analyzed";
 
   return (
@@ -65,17 +66,20 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
             </p>
           )}
           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>
-          {isLive && <AnalysisPanel convo={convo} />}
+          {isLive && (
+            <AnalysisPanel convo={convo}>
+              {showDraft && (
+                <AttentionReply
+                  convo={convo}
+                  onSaveDraft={onSaveReplyDraft}
+                  onMarkReplied={onMarkReplied}
+                  busy={replyBusy}
+                />
+              )}
+            </AnalysisPanel>
+          )}
           {isLive && <ConversationOriginal convo={convo} />}
           {isLive && <PreviousAnalysis text={convo.previous_analysis} className="mt-2.5" />}
-          {showDraft && (
-            <AttentionReply
-              convo={convo}
-              onSaveDraft={onSaveReplyDraft}
-              onMarkReplied={onMarkReplied}
-              busy={replyBusy}
-            />
-          )}
           {convo.opportunity_id && (
             <Link
               to={`/opportunities/${convo.opportunity_id}`}

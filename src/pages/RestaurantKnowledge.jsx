@@ -16,12 +16,13 @@ import VendorsEditor from "@/components/knowledge/VendorsEditor";
 import FinanceEditor from "@/components/knowledge/FinanceEditor";
 import OperationsEditor from "@/components/knowledge/OperationsEditor";
 import MarketingEditor from "@/components/knowledge/MarketingEditor";
+import ResponseTemplatesEditor from "@/components/knowledge/ResponseTemplatesEditor";
 import { TextField, SelectField } from "@/components/knowledge/Fields";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Save, Loader2, Check, MapPin, Clock, CalendarCheck, PartyPopper, PenLine,
-  UtensilsCrossed, Info, Users, Briefcase, Truck, Wallet, Wrench, Megaphone,
+  UtensilsCrossed, Info, Users, Briefcase, Truck, Wallet, Wrench, Megaphone, FileText,
   } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
@@ -87,6 +88,14 @@ const GROUPS = [
       { id: "finance", icon: Wallet, title: "Finance & billing", description: "How invoices and payments are handled — trusted context Relay uses to interpret billing email." },
       { id: "operations", icon: Wrench, title: "Operations", description: "How the restaurant runs day to day — used carefully when an email touches equipment or urgent matters." },
       { id: "marketing", icon: Megaphone, title: "Marketing", description: "Promotions, social media, and brand context for marketing-related emails." },
+    ],
+  },
+  {
+    id: "templates",
+    label: "Response Templates",
+    icon: FileText,
+    sections: [
+      { id: "templates", icon: FileText, title: "Response templates", description: "How your restaurant handles its common inquiries — Relay follows this guidance when analyzing and drafting, and always recommends the next step for you to approve." },
     ],
   },
 ];
@@ -283,6 +292,15 @@ export default function RestaurantKnowledge() {
         return (
           <KnowledgeSection {...common}>
             <MarketingEditor value={knowledge} onChange={setKnowledge} />
+          </KnowledgeSection>
+        );
+      case "templates":
+        return (
+          <KnowledgeSection {...common}>
+            <ResponseTemplatesEditor
+              value={knowledge.response_templates}
+              onChange={setField("response_templates")}
+            />
           </KnowledgeSection>
         );
       default:

@@ -135,3 +135,19 @@
 .draft-editor .ql-editor.ql-blank::before {
   color: hsl(var(--muted-foreground));
 }
+
+/* Drafts must wrap, never widen the page: long URLs and unbroken strings
+   break within the word, and the editor always uses the full content width. */
+.draft-rich {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.draft-editor .ql-container {
+  width: 100%;
+  min-width: 0;
+}
+.draft-editor .ql-editor {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
