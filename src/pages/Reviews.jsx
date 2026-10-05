@@ -4,7 +4,6 @@ import { useAuth } from "@/lib/AuthContext";
 import { getRestaurantId } from "@/lib/format";
 import ReviewSourceCard from "@/components/reviews/ReviewSourceCard";
 import ReviewCard from "@/components/reviews/ReviewCard";
-import DemoBanner from "@/components/DemoBanner";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { RefreshCw, Star } from "lucide-react";
@@ -73,7 +72,7 @@ export default function Reviews() {
     if (syncing) return;
     setSyncing(true);
     try {
-      const payload = provider === "demo" ? { provider: "demo" } : provider === "google" ? { provider: "google" } : {};
+      const payload = provider === "google" ? { provider: "google" } : {};
       const res = await base44.functions.invoke("reviewSync", payload);
       const data = res.data || {};
       const s = (data.sources || [])[0];
@@ -109,15 +108,10 @@ export default function Reviews() {
   const sourceLabelById = {};
   sources.forEach((s) => {
     const meta = sourceMetaFor(s);
-    const loc =
-      s.provider_location_name && s.provider_location_name !== "Demo review data"
-        ? s.provider_location_name
-        : null;
+    const loc = s.provider_location_name || null;
     sourceLabelById[s.id] = loc ? `${meta.label} · ${loc}` : meta.label;
   });
   const googleSource = sources.find((s) => s.provider === "google");
-  const demoSource = sources.find((s) => s.provider === "demo");
-  const demoReviewCount = reviews.filter((r) => r.is_demo).length;
   const filtered = reviews.filter((r) => matchesFilter(r, filter));
 
   return (
@@ -135,12 +129,6 @@ export default function Reviews() {
         </Button>
       </div>
 
-      {demoSource && (
-        <div className="mb-4">
-          <DemoBanner />
-        </div>
-      )}
-
       <h2 className="text-sm font-semibold text-foreground mb-2">Review sources</h2>
       <div className="grid gap-3 mb-6">
         <ReviewSourceCard
@@ -149,13 +137,6 @@ export default function Reviews() {
           onAction={() => runSync("google")}
           busy={syncing}
           note="Google Business Profile API access isn't configured yet — the connect button activates once Google OAuth is available."
-        />
-        <ReviewSourceCard
-          meta={demoSource ? sourceMetaFor(demoSource) : PROVIDER_META.demo}
-          source={demoSource}
-          onAction={() => runSync("demo")}
-          busy={syncing}
-          reviewCount={demoReviewCount}
         />
         <div className="grid sm:grid-cols-3 gap-3">
           {UPCOMING_PROVIDERS.map((id) => (
@@ -188,12 +169,9 @@ export default function Reviews() {
             <div className="w-10 h-10 rounded-full bg-secondary mx-auto flex items-center justify-center mb-3">
               <Star className="w-5 h-5 text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              No reviews yet. Load the demo review data to see the full review workflow.
+            <p className="text-sm text-muted-foreground">
+              No reviews yet. Reviews from your connected providers will appear here.
             </p>
-            <Button variant="outline" onClick={() => runSync("demo")} disabled={syncing}>
-              Load demo reviews
-            </Button>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-10">
@@ -212,7 +190,7 @@ export default function Reviews() {
               review={r}
               sourceLabel={
                 sourceLabelById[r.review_source_id] ||
-                (r.is_demo ? "Demo review data" : PROVIDER_META[r.provider] ? PROVIDER_META[r.provider].label : r.provider)
+                (PROVIDER_META[r.provider] ? PROVIDER_META[r.provider].label : r.provider)
               }
             />
           ))}

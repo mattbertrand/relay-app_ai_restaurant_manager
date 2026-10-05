@@ -173,6 +173,18 @@ export default async function(req) {
 
     queue.sort((a, b) => b.score - a.score);
 
+    // A small, meaningful priority level per queue item — High / Normal / Low.
+    // High: complaints and same-day issues, overdue or due-today follow-ups,
+    // high-priority opportunities, customers already waiting. The rest rank
+    // Normal or Low from their urgency score — no complicated scoring in the UI.
+    const priorityFor = (item) =>
+      item.urgency === "overdue" || item.urgency === "high" || item.urgency === "due"
+        ? "High"
+        : item.score >= 60
+        ? "Normal"
+        : "Low";
+    for (const item of queue) item.priority = priorityFor(item);
+
     // ---- New Reviews by provider. Google is the only connected provider
     // today and always appears (a true zero state); any future provider shows
     // up only when it actually has data — no empty placeholders. ----
@@ -241,7 +253,7 @@ export default async function(req) {
         new_reviews: newReviews.length,
         scheduled_today: schedule.connected ? schedule.today.length : 0,
       },
-      need_action: queue.slice(0, 8),
+      need_action: queue.slice(0, 50),
       emails: { new: newConvos.length, breakdown },
       reviews: {
         new: newReviews.length,
@@ -252,7 +264,6 @@ export default async function(req) {
       today_items: todayItems.slice(0, 6),
       upcoming_items: upcomingItems.slice(0, 4),
       upcoming_all: upcomingItems.slice(0, 20),
-      has_demo: [...convos, ...opps, ...actions, ...reviews].some((r) => r.is_demo),
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
