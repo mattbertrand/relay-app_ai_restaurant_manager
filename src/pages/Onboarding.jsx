@@ -3,10 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { base44 } from "@/api/base44Client";
 import { getRestaurantId } from "@/lib/format";
-import {
-  generateDemoOpportunities, generateDemoConversations,
-  generateDemoActions, generateDemoActivities,
-} from "@/lib/demoData";
 import { RESTAURANT_TYPES, EMPLOYEE_RANGES, INQUIRY_RANGES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,27 +67,12 @@ export default function Onboarding() {
         restaurant_type: form.restaurant_type,
         employee_count: form.employee_count,
         monthly_inquiries: form.monthly_inquiries,
-        is_demo: true,
       });
 
       // 2. Link the restaurant to the user
       await base44.auth.updateMe({ restaurant_id: restaurant.id });
 
-      // 3. Seed demo data
-      const demoOpps = generateDemoOpportunities(restaurant.id);
-      const createdOpps = await base44.entities.Opportunity.bulkCreate(demoOpps);
-      const oppIds = createdOpps.map((o) => o.id);
-
-      const demoConvos = generateDemoConversations(restaurant.id, oppIds);
-      await base44.entities.Conversation.bulkCreate(demoConvos);
-
-      const demoActions = generateDemoActions(restaurant.id, oppIds);
-      await base44.entities.Action.bulkCreate(demoActions);
-
-      const demoActivities = generateDemoActivities(restaurant.id, oppIds);
-      await base44.entities.Activity.bulkCreate(demoActivities);
-
-      // 4. Hard redirect so auth context picks up the new restaurant_id
+      // 3. Hard redirect so auth context picks up the new restaurant_id
       window.location.href = "/today";
     } catch (err) {
       console.error(err);
@@ -223,7 +204,7 @@ export default function Onboarding() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          We'll add sample data so you can explore Relay right away.
+          Relay starts with a clean slate — it only tracks your real communications.
         </p>
       </div>
     </div>

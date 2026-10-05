@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { approveResponse } from "@/lib/opportunityActions";
 import StatusBadge from "@/components/StatusBadge";
-import DemoBanner from "@/components/DemoBanner";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { formatValueRange, timeAgo } from "@/lib/format";
@@ -46,7 +45,6 @@ export default function Actions() {
 
   const oppMap = (opportunities || []).reduce((acc, o) => { acc[o.id] = o; return acc; }, {});
   const filtered = (actions || []).filter((a) => filter === "All" || a.status === filter);
-  const hasDemo = (actions || []).some((a) => a.is_demo);
 
   const updateAction = async (action, newStatus) => {
     setBusy(action.id);
@@ -94,7 +92,6 @@ export default function Actions() {
         <p className="text-muted-foreground text-sm mt-1">Recommended actions from Relay. Everything requires your approval.</p>
       </div>
 
-      {hasDemo && <div className="mb-6"><DemoBanner /></div>}
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-5 -mx-1 px-1">
         {FILTERS.map((f) => (
@@ -138,10 +135,7 @@ export default function Actions() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">{action.type}</span>
-                    {action.is_demo && (
-                      <span className="text-[10px] font-medium text-stone-500 bg-stone-50 border border-stone-200 px-1.5 py-0.5 rounded-full">Demo data</span>
-                    )}
-                    <StatusBadge status={action.status} />
+                      <StatusBadge status={action.status} />
                       {action.requires_approval && (
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           <Clock className="w-3 h-3" /> Needs approval

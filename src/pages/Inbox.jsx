@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import DemoBanner from "@/components/DemoBanner";
 import BackToToday from "@/components/BackToToday";
 import EmptyState from "@/components/EmptyState";
 import ConversationCard from "@/components/ConversationCard";
@@ -20,7 +19,6 @@ import { htmlToPlainText } from "@/lib/draftText";
 const FILTERS = ["All", "New", "Reply recorded", "Archived"];
 const SOURCES = [
   { label: "All", value: "all" },
-  { label: "Demo data", value: "demo" },
   { label: "Live Gmail", value: "gmail" },
 ];
 // The Inbox context (tab, source, scroll position) survives navigation, so
@@ -267,13 +265,9 @@ export default function Inbox() {
       (analysisFilter === "Needs review"
         ? !c.analysis_status || c.analysis_status === "Not analyzed" || c.analysis_status === "Needs review"
         : c.analysis_status === analysisFilter);
-    const sourceOk =
-      source === "all" ||
-      (source === "gmail" && c.source === "Gmail" && !c.is_demo) ||
-      (source === "demo" && c.is_demo);
+    const sourceOk = source === "all" || (source === "gmail" && c.source === "Gmail" && !c.is_demo);
     return statusOk && analysisOk && sourceOk;
   });
-  const hasDemo = (conversations || []).some((c) => c.is_demo);
   const isLive = (c) => c.source === "Gmail" && !c.is_demo;
 
   // Group near-duplicate live messages (same sender, same subject) so they read
@@ -335,8 +329,6 @@ export default function Inbox() {
           </div>
         </div>
       )}
-
-      {hasDemo && source !== "gmail" && <div className="mb-6"><DemoBanner /></div>}
 
       {syncing && (
         <p className="text-xs text-muted-foreground mb-4">Checking Gmail for new messages…</p>

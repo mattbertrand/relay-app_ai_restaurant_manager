@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import DemoBanner from "@/components/DemoBanner";
 import { Button } from "@/components/ui/button";
 import HeaderSummary from "@/components/today/HeaderSummary";
 import ScheduleSection from "@/components/today/ScheduleSection";
@@ -64,8 +63,6 @@ export default function Today() {
       </div>
 
       <HeaderSummary name={data.manager_first_name} counts={data.counts} />
-
-      {data.has_demo && <div className="mb-6"><DemoBanner /></div>}
 
       <ScheduleSection schedule={data.schedule} onScheduleChanged={loadData} />
       <NewEmailsSection emails={data.emails} />
