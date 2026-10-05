@@ -72,7 +72,7 @@ export default function Reviews() {
     if (syncing) return;
     setSyncing(true);
     try {
-      const payload = provider === "google" ? { provider: "google" } : {};
+      const payload = provider === "demo" ? { provider: "demo" } : provider === "google" ? { provider: "google" } : {};
       const res = await base44.functions.invoke("reviewSync", payload);
       const data = res.data || {};
       const s = (data.sources || [])[0];
@@ -112,6 +112,8 @@ export default function Reviews() {
     sourceLabelById[s.id] = loc ? `${meta.label} · ${loc}` : meta.label;
   });
   const googleSource = sources.find((s) => s.provider === "google");
+  const demoSource = sources.find((s) => s.provider === "demo");
+  const demoReviewCount = reviews.filter((r) => r.is_demo).length;
   const filtered = reviews.filter((r) => matchesFilter(r, filter));
 
   return (
@@ -137,6 +139,13 @@ export default function Reviews() {
           onAction={() => runSync("google")}
           busy={syncing}
           note="Google Business Profile API access isn't configured yet — the connect button activates once Google OAuth is available."
+        />
+        <ReviewSourceCard
+          meta={demoSource ? sourceMetaFor(demoSource) : PROVIDER_META.demo}
+          source={demoSource}
+          onAction={() => runSync("demo")}
+          busy={syncing}
+          reviewCount={demoSource ? demoReviewCount : undefined}
         />
         <div className="grid sm:grid-cols-3 gap-3">
           {UPCOMING_PROVIDERS.map((id) => (

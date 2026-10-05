@@ -27,6 +27,21 @@ export function ensureSingleSignature(draft, signature) {
     // single signature sits at the very end with one blank line before it.
     if (matches.length === 1) return text;
     const kept = [...lines];
+    // The model may also end the last line of prose with the signature inline
+    // ("...see you soon. Hopmonk Tavern Novato") — strip that trailing inline
+    // copy so the appended signature stays the only one.
+    if (sigLines.length === 1) {
+      const sigLower = sigLines[0].toLowerCase();
+      for (let i = kept.length - 1; i >= 0; i--) {
+        if (!kept[i].trim()) continue;
+        const line = kept[i].trim();
+        const lineLower = line.toLowerCase();
+        if (lineLower !== sigLower && lineLower.endsWith(sigLower) && lineLower.length > sigLower.length) {
+          kept[i] = line.slice(0, line.length - sigLines[0].length).trimEnd();
+        }
+        break;
+      }
+    }
     while (kept.length && kept[kept.length - 1].trim() === "") kept.pop();
     return [...kept, "", sig].join("\n");
   }
