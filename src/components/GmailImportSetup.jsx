@@ -52,17 +52,15 @@ export default function GmailImportSetup({ initialSelection, importing, progress
       <div className="mt-4 rounded-lg border border-border bg-muted/50 p-4">
         <p className="text-sm font-medium text-foreground flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin text-primary" />
-          Analyzing recent email…
+          Importing recent email…
         </p>
         <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-          Relay is reviewing your selected email history and identifying conversations that may need attention.
+          Relay is importing your selected email history. Each imported message is then analyzed independently in the
+          background — a slow message never holds up the rest.
         </p>
         {progress && !progress.error && (
           <p className="text-xs text-muted-foreground mt-2">
-            {progress.imported} message{progress.imported === 1 ? "" : "s"} imported · {progress.analyzed} analyzed
-            {progress.opportunities
-              ? ` · ${progress.opportunities} opportunit${progress.opportunities === 1 ? "y" : "ies"} identified`
-              : ""}
+            {progress.imported} message{progress.imported === 1 ? "" : "s"} imported
           </p>
         )}
         {progress && progress.error && <p className="text-xs text-destructive mt-2">{progress.error}</p>}

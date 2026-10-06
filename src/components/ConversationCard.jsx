@@ -7,7 +7,7 @@ import ConversationOriginal from "@/components/ConversationOriginal";
 import PreviousAnalysis from "@/components/PreviousAnalysis";
 import ReanalyzeButton from "@/components/ReanalyzeButton";
 import { Button } from "@/components/ui/button";
-import { Mail, Archive, AlertCircle, Undo2 } from "lucide-react";
+import { Mail, Archive, AlertCircle, Undo2, Loader2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { categoryLabel } from "@/lib/classification";
 import { cn } from "@/lib/utils";
@@ -58,11 +58,24 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
             <p className="text-xs text-muted-foreground">{convo.customer_email}</p>
           )}
           <h3 className="text-sm font-medium text-foreground mt-2">{convo.subject}</h3>
-          {isLive && hasAnalysis && (
+          {isLive && hasAnalysis && convo.analysis_state !== "failed" && (
             <p className="text-xs text-muted-foreground mt-0.5">
               {convo.analysis_status === "Opportunity" ? "Revenue opportunity" : convo.analysis_status}
               {convo.category ? ` · ${categoryLabel(convo.category)}` : ""}
               {convo.intent ? ` · ${convo.intent}` : ""}
+            </p>
+          )}
+          {isLive && !hasAnalysis && convo.analysis_state === "pending" && (
+            <p className="text-xs text-muted-foreground mt-0.5">Waiting for analysis…</p>
+          )}
+          {isLive && !hasAnalysis && convo.analysis_state === "processing" && (
+            <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1.5">
+              <Loader2 className="w-3 h-3 animate-spin" /> Analyzing…
+            </p>
+          )}
+          {isLive && convo.analysis_state === "failed" && (
+            <p className="text-xs text-amber-700 mt-0.5">
+              {convo.analysis_error || "Analysis didn't finish for this message."}
             </p>
           )}
           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{convo.message}</p>

@@ -130,9 +130,7 @@ export default function ScheduleSection({ schedule, onScheduleChanged }) {
   return (
     <section id="schedule" className="mb-8">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-heading text-lg font-semibold text-foreground">
-          Schedule <span className="text-muted-foreground font-normal">({schedule.today.length})</span>
-        </h2>
+        <h2 className="font-heading text-lg font-semibold text-foreground">Schedule</h2>
         <button
           onClick={handleDisconnect}
           className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
@@ -170,7 +168,7 @@ export default function ScheduleSection({ schedule, onScheduleChanged }) {
         <p className="text-[11px] font-semibold tracking-wide text-primary mb-2">TODAY</p>
         {schedule.today.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {schedule.status === "fetch_error" ? "Calendar events aren't loading right now." : "Nothing on your calendar today."}
+            {schedule.status === "fetch_error" ? "Calendar events aren't loading right now." : "Nothing scheduled today."}
           </p>
         ) : (
           <ul className="space-y-1.5">
@@ -182,6 +180,45 @@ export default function ScheduleSection({ schedule, onScheduleChanged }) {
             ))}
           </ul>
         )}
+        {(() => {
+          // Upcoming days of this week that actually have events — full dates,
+          // so an empty "today" never hides what's coming later in the week.
+          const todayIdx = week.findIndex((d) => d.is_today);
+          const upcoming = (todayIdx >= 0 ? week.slice(todayIdx + 1) : week).filter(
+            (d) => (d.count || 0) > 0
+          );
+          if (!upcoming.length) return null;
+          return (
+            <div className="mt-4">
+              <p className="text-[11px] font-semibold tracking-wide text-muted-foreground mb-2">UPCOMING THIS WEEK</p>
+              <ul className="space-y-1.5">
+                {upcoming.map((d) => {
+                  const fullDate = new Intl.DateTimeFormat("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  }).format(new Date(`${d.date}T12:00:00Z`));
+                  const titles = (d.events || []).map((e) => e.title).filter(Boolean).slice(0, 2).join(" · ");
+                  return (
+                    <li key={d.date}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDate(selectedDate === d.date ? null : d.date)}
+                        className="w-full text-left rounded-lg px-2 py-1.5 -mx-2 hover:bg-muted/60 transition-colors"
+                      >
+                        <span className="text-sm text-foreground">{fullDate}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {d.count} event{d.count === 1 ? "" : "s"}{titles ? ` — ${titles}` : ""}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })()}
         <p className="text-[11px] font-semibold tracking-wide text-muted-foreground mb-2 mt-4">THIS WEEK</p>
         <div className="grid grid-cols-7 gap-1.5">
           {week.map((d) => {

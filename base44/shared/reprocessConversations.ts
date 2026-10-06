@@ -182,6 +182,10 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
       // Analysis failed — keep the email visible and flagged for manual review
       await base44.entities.Conversation.update(convo.id, {
         analysis_status: "Needs review",
+        analysis_state: "failed",
+        analysis_completed_at: null,
+        analysis_attempts: (convo.analysis_attempts || 0) + 1,
+        analysis_error: "Relay couldn't finish analyzing this message. Retry analysis.",
         status: inboxStatus(convo),
       });
       summary.needsReview++;
@@ -264,6 +268,9 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         ...preview,
         ...conversationUpdatesFor("opportunity", analysis, { preserveManagerDraft: managerDraft }),
         status: inboxStatus(convo),
+        analysis_state: "analyzed",
+        analysis_completed_at: new Date().toISOString(),
+        analysis_error: "",
       });
       // Only a real change earns a history entry — re-running the analysis
       // must not pile up "re-reviewed" events on every pass. The event is
@@ -297,6 +304,9 @@ export async function reprocessConversations({ base44, restaurantId, restaurantN
         ...preview,
         ...outcome,
         status: inboxStatus(convo),
+        analysis_state: "analyzed",
+        analysis_completed_at: new Date().toISOString(),
+        analysis_error: "",
       });
       if (classification === "attention") summary.attentionFlagged++;
 

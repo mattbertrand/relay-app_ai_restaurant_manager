@@ -253,7 +253,7 @@ export default async function(req) {
         new_reviews: newReviews.length,
         scheduled_today: schedule.connected ? schedule.today.length : 0,
       },
-      need_action: queue.slice(0, 50),
+      need_action: queue.slice(0, 200),
       emails: { new: newConvos.length, breakdown },
       reviews: {
         new: newReviews.length,

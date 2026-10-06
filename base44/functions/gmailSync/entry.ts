@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.49';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import {
   GMAIL_CONNECTOR_ID,
   getGmailProfile,
@@ -8,23 +8,17 @@ import {
   parseFromAddress,
   extractTextBody,
 } from "../../shared/gmailApi.ts";
-import { analyzeEmail, opportunityTypeFor, conversationUpdatesFor } from "../../shared/emailAnalysis.ts";
-import { findDuplicateConversation, linkFollowup } from "../../shared/dedupe.ts";
+import { findDuplicateConversation } from "../../shared/dedupe.ts";
 import { matchExistingConversation } from "../../shared/threadMatching.ts";
-import {
-  loadKnowledge,
-  loadRecentFeedback,
-  formatKnowledgeForPrompt,
-  formatAdminContextForPrompt,
-  formatCorrectionsForPrompt,
-  formatResponseTemplatesForPrompt,
-} from "../../shared/restaurantKnowledge.ts";
+import { loadKnowledge } from "../../shared/restaurantKnowledge.ts";
 import { reprocessConversations } from "../../shared/reprocessConversations.ts";
-import { calendarAnalysisContext } from "../../shared/calendarSchedule.ts";
 
-// Gmail sync for Relay — imports new mail, classifies it, and supports reprocessing.
+// Gmail sync for Relay — the IMPORT stage only. It imports new mail, dedupes
+// it, and marks every message pending for analysis. Analysis is a separate
+// stage run by the analyzeEmails worker (one message per Email Analysis
+// workflow trigger, plus a batch kick), so a slow or failed analysis never
+// blocks the import or any other message.
 const MAX_MESSAGES = 20;
-const MAX_ANALYZE = 6;
 
 // The UTC timestamp of local midnight "today" in an IANA timezone — what
 // "Today" means for the initial import (the current calendar day, never the
@@ -96,15 +90,10 @@ export default async function(req) {
       });
     }
 
-    // Verified restaurant knowledge and this restaurant's manager corrections
-    // steer the analysis: facts the manager entered are authoritative, and a
-    // rule learned from one restaurant never affects another restaurant.
-    // Loaded before the backfill window is computed — the restaurant's
-    // timezone defines what "Today" means for the initial import.
-    const [knowledgeRecord, feedback] = await Promise.all([
-      loadKnowledge(base44, restaurantId),
-      loadRecentFeedback(base44, restaurantId),
-    ]);
+    // The restaurant's timezone defines what "Today" means for the initial
+    // import — loaded before the backfill window is computed. (Analysis
+    // context is loaded by the analyzeEmails worker, not here.)
+    const knowledgeRecord = await loadKnowledge(base44, restaurantId);
 
     // Initial-import configuration — the manager's choice of how much
     // existing email to analyze when Gmail is first connected. Stored on this
@@ -148,9 +137,6 @@ export default async function(req) {
         chosenWindow === "30d" ? Date.now() - 30 * 24 * 60 * 60 * 1000 :
         new Date(`${fromDate}T00:00:00Z`).getTime();
     }
-    const knowledgeContext = formatKnowledgeForPrompt(knowledgeRecord);
-    const corrections = formatCorrectionsForPrompt(feedback);
-
     // Load existing records for duplicate and thread protection
     const [existingMsgs, convos, customers, opps] = await Promise.all([
       base44.entities.ConversationMessage.filter({ restaurant_id: restaurantId }, null, 500),
@@ -225,17 +211,11 @@ export default async function(req) {
       newMessages: 0,
       newThreads: 0,
       duplicatesMerged: 0,
-      analyzed: 0,
-      opportunitiesCreated: 0,
-      followupsLinked: 0,
+      pendingAnalysis: 0,
       reopened: 0,
-      relatedMerged: 0,
-      attentionFlagged: 0,
-      needsReview: 0,
     };
     const maxMessages = backfillActive ? 30 : MAX_MESSAGES;
 
-    const toAnalyze = [];
     // The restaurant's own mail — both the configured restaurant address and
     // the connected Gmail account itself — is never imported or analyzed. This
     // keeps the manager's own outbound replies out of the inbox and out of
@@ -369,6 +349,7 @@ export default async function(req) {
           gmail_message_id: message.id,
           received_at: receivedAt,
           analysis_status: 'Not analyzed',
+          analysis_state: 'pending',
           is_demo: false,
         });
         threadConvos[message.threadId] = convo;
@@ -394,14 +375,7 @@ export default async function(req) {
             ? `Email imported (initial history): ${subject} from ${from.name}`
             : `Email received: ${subject} from ${from.name}`,
         });
-        toAnalyze.push({
-          convo,
-          subject,
-          body,
-          senderName: from.name,
-          senderEmail: from.email,
-          receivedAt,
-        });
+        summary.pendingAnalysis++;
       } else {
         const target = threadConvo || duplicateConvo;
         // Attach the message to the existing conversation (reply or duplicate)
@@ -420,7 +394,11 @@ export default async function(req) {
           // Existing thread: attach the reply, don't duplicate the conversation.
           // Inbox status is separate from the opportunity lifecycle — a new
           // customer reply makes the message New again until reviewed.
-          await base44.entities.Conversation.update(threadConvo.id, { status: 'New' });
+          await base44.entities.Conversation.update(threadConvo.id, {
+            status: 'New',
+            analysis_state: 'pending',
+            analysis_error: '',
+          });
 
           // A new customer message on a thread whose opportunity was resolved
           // reopens the matter — it is not finished after all
@@ -439,19 +417,13 @@ export default async function(req) {
             summary.reopened++;
           }
 
-          // A follow-up in an existing thread re-enters the Inbox as New and is
-          // re-analyzed below: the customer's new intent may deserve a fresh
-          // draft, a linked follow-up, or a new opportunity — while the thread
-          // history (ConversationMessage records) stays with this conversation.
-          toAnalyze.push({
-            convo: threadConvo,
-            subject,
-            body,
-            senderName: from.name,
-            senderEmail: from.email,
-            receivedAt,
-            isThreadReply: true,
-          });
+          // A follow-up in an existing thread re-enters the Inbox as New and
+          // re-enters the analysis queue: the customer's new intent may deserve
+          // a fresh draft, a linked follow-up, or a new opportunity — while
+          // the thread history (ConversationMessage records) stays with this
+          // conversation. The analysis worker continues that thread's own
+          // opportunity when one exists — never a duplicate.
+          summary.pendingAnalysis++;
         } else {
           // Same email arriving again (re-send, Gmail duplication, transfer retry)
           summary.duplicatesMerged++;
@@ -471,180 +443,30 @@ export default async function(req) {
       }
     }
 
-    // Pick up threads from a previous capped run that were never analyzed
+    // Legacy messages imported before the analysis queue existed (or left
+    // unanalyzed by a capped run): mark them pending so the analyzeEmails
+    // worker picks them up — the Email Analysis workflow trigger or the next
+    // batch kick.
     const previouslyUnanalyzed = convos.filter(
       (c) =>
         c.analysis_status === 'Not analyzed' &&
         c.source === 'Gmail' &&
-        !toAnalyze.some((t) => t.convo.id === c.id)
+        !c.is_demo &&
+        !c.analysis_state
     );
     for (const c of previouslyUnanalyzed) {
-      const firstMsg = existingMsgs.find((m) => m.conversation_id === c.id);
-      toAnalyze.push({
-        convo: c,
-        subject: c.subject,
-        body: firstMsg ? firstMsg.body : c.message,
-        senderName: c.customer_name,
-        senderEmail: c.customer_email,
-        receivedAt: c.received_at,
+      await base44.entities.Conversation.update(c.id, {
+        analysis_state: 'pending',
+        analysis_error: '',
       });
-    }
-
-    // Analyze new threads (bounded batch — the rest are picked up on the next
-    // sync). Thread follow-ups are analyzed first: a reply in an existing
-    // conversation would otherwise never be re-picked-up by a later sync.
-    const analyzeOrder = [...toAnalyze].sort(
-      (a, b) => (b.isThreadReply ? 1 : 0) - (a.isThreadReply ? 1 : 0)
-    );
-    for (const item of analyzeOrder.slice(0, MAX_ANALYZE)) {
-      summary.analyzed++;
-      // A follow-up in an existing thread: the conversation now shows the new
-      // message, and the reply workflow is available again for it.
-      const threadExtras = item.isThreadReply
-        ? {
-            message: item.body.slice(0, 4000),
-            received_at: item.receivedAt,
-            reply_status: 'Not replied',
-            replied_at: null,
-          }
-        : {};
-      let analysis;
-      try {
-        analysis = await analyzeEmail(base44, restaurant.name || 'the restaurant', {
-          senderName: item.senderName,
-          senderEmail: item.senderEmail,
-          subject: item.subject,
-          body: item.body,
-        }, {
-          knowledgeContext,
-          adminContext: formatAdminContextForPrompt(knowledgeRecord, {
-            senderEmail: item.senderEmail,
-            subject: item.subject,
-            body: item.body,
-          }),
-          corrections,
-          templatesContext: formatResponseTemplatesForPrompt(knowledgeRecord),
-          calendarContext: await calendarAnalysisContext(base44, knowledgeRecord, item.subject, item.body),
-          timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
-          signature: knowledgeRecord && knowledgeRecord.email_signature ? knowledgeRecord.email_signature : null,
-        });
-      } catch (e) {
-        // Analysis failed — keep the email visible and flag it for manual review
-        await base44.entities.Conversation.update(item.convo.id, {
-          analysis_status: 'Needs review',
-          status: 'New',
-        });
-        summary.needsReview++;
-        continue;
-      }
-
-      const classification = analysis.classification || 'routine';
-      if (classification === 'opportunity') {
-        // A follow-up that arrived INSIDE an existing Gmail thread continues
-        // that thread's own matter: link it to this conversation's opportunity
-        // (reopening it if resolved). A separate email from the same sender is
-        // a separate matter and gets its own opportunity — never linked by sender.
-        const threadOpp = item.isThreadReply && item.convo.opportunity_id
-          ? opps.find((o) => o.id === item.convo.opportunity_id)
-          : null;
-        if (threadOpp) {
-          const reopened = await linkFollowup(base44, {
-            restaurantId,
-            opportunity: threadOpp,
-            customerName: item.senderName,
-            priority: analysis.priority,
-            conversationId: item.convo.id,
-          });
-          await base44.entities.Conversation.update(item.convo.id, {
-            ...conversationUpdatesFor('opportunity', analysis),
-            ...threadExtras,
-          });
-          summary.followupsLinked++;
-          if (reopened) summary.reopened++;
-          continue;
-        }
-        const oppType = opportunityTypeFor(analysis.category) || analysis.opportunity_type || 'Business inquiry';
-        const originalMessage = `Subject: ${item.subject}\n\n${item.body}`;
-        const opp = await base44.entities.Opportunity.create({
-          restaurant_id: restaurantId,
-          type: oppType,
-          title: analysis.title || item.subject,
-          description: analysis.description || analysis.why_flagged,
-          customer_name: item.senderName,
-          customer_email: item.senderEmail,
-          estimated_value_min: analysis.has_value_estimate ? analysis.estimated_value_min : null,
-          estimated_value_max: analysis.has_value_estimate ? analysis.estimated_value_max : null,
-          value_confidence: analysis.has_value_estimate ? analysis.value_confidence || 'Medium' : null,
-          value_basis: analysis.has_value_estimate ? analysis.value_basis : null,
-          priority: analysis.priority || 'medium',
-          status: 'New',
-          draft_status: 'Draft',
-          recommended_action: analysis.recommended_action || 'Review and respond to this inquiry',
-          source: 'Gmail',
-          original_message: originalMessage.slice(0, 8000),
-          why_identified:
-            [analysis.customer_facts, analysis.relay_assessment, analysis.knowledge_used].filter(Boolean).join(' ') +
-            ` Relay flagged this with ${analysis.confidence || 'Medium'} confidence.`,
-          draft_response: analysis.draft_response || '',
-          last_analyzed_at: new Date().toISOString(),
-          is_demo: false,
-        });
-        opps.push(opp);
-
-        await base44.entities.Conversation.update(item.convo.id, {
-          opportunity_id: opp.id,
-          ...conversationUpdatesFor('opportunity', analysis),
-          ...threadExtras,
-        });
-
-        if (analysis.draft_response) {
-          await base44.entities.Action.create({
-            restaurant_id: restaurantId,
-            opportunity_id: opp.id,
-            type: 'Draft response',
-            description: `Draft a response to ${item.senderName} regarding "${item.subject}".`,
-            status: 'Pending Approval',
-            requires_approval: true,
-          });
-        }
-
-        await base44.entities.Activity.create({
-          restaurant_id: restaurantId,
-          opportunity_id: opp.id,
-          conversation_id: item.convo.id,
-          type: 'opportunity_identified',
-          description: `Opportunity identified: ${opp.title} from ${item.senderName} (Gmail)`,
-        });
-        if (analysis.draft_response) {
-          await base44.entities.Activity.create({
-            restaurant_id: restaurantId,
-            opportunity_id: opp.id,
-            conversation_id: item.convo.id,
-            type: 'draft_prepared',
-            description: `Draft response created for ${item.senderName}'s ${oppType.toLowerCase()}`,
-          });
-        }
-        summary.opportunitiesCreated++;
-      } else {
-        const outcome = conversationUpdatesFor(classification, analysis);
-        await base44.entities.Conversation.update(item.convo.id, {
-          ...outcome,
-          ...threadExtras,
-        });
-        if (classification === 'attention') summary.attentionFlagged++;
-
-        // Nothing else to do: a separate email from the same sender (e.g. a
-        // job application follow-up Gmail filed as its own thread) stays its
-        // own conversation — sender similarity is never a relationship.
-      }
+      summary.pendingAnalysis++;
     }
 
     if (backfillActive) {
-      // The backfill is only finished when the Gmail list is exhausted AND
-      // every imported conversation has been analyzed; otherwise the caller
-      // keeps calling and progress continues where it left off.
-      const leftoverToAnalyze = Math.max(0, analyzeOrder.length - MAX_ANALYZE);
-      const done = !listPageToken && !hitCap && leftoverToAnalyze === 0;
+      // The IMPORT is finished when the Gmail list is exhausted — analysis
+      // continues independently in the background and never holds the import
+      // open.
+      const done = !listPageToken && !hitCap;
       if (done && gmailSetup && !gmailSetup.completed_at) {
         gmailSetup = { ...gmailSetup, completed_at: new Date().toISOString() };
         await base44.entities.Restaurant.update(restaurantId, { gmail_setup: gmailSetup });

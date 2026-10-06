@@ -50,6 +50,35 @@
         "Needs review"
       ]
     },
+    "analysis_state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "analyzed",
+        "failed"
+      ],
+      "description": "The analysis queue state of this email \u2014 independent of every other email: pending (queued for analysis), processing (analysis in progress), analyzed (done), failed (analysis didn't finish; retryable). Import and analysis are separate stages."
+    },
+    "analysis_attempts": {
+      "type": "integer",
+      "default": 0,
+      "description": "How many times analysis was attempted for this email."
+    },
+    "analysis_started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the current analysis attempt started."
+    },
+    "analysis_completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When analysis last finished (successfully)."
+    },
+    "analysis_error": {
+      "type": "string",
+      "description": "A safe, plain-language note when analysis failed \u2014 never technical detail."
+    },
     "category": {
       "type": "string",
       "description": "What the email represents, e.g. reservation, job_application, general_customer_inquiry."

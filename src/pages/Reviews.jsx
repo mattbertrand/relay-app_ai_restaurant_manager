@@ -18,6 +18,9 @@ const FILTERS = [
   { id: "resolved", label: "Resolved" },
 ];
 
+// The Reviews list state (the selected filter) survives navigation.
+const REVIEWS_CONTEXT_KEY = "relay-reviews-context";
+
 function matchesFilter(review, filter) {
   if (filter === "all") return true;
   if (filter === "attention") {
@@ -37,8 +40,25 @@ export default function Reviews() {
   const [sources, setSources] = useState(null);
   const [reviews, setReviews] = useState(null);
   const [counts, setCounts] = useState({ all: 0, attention: 0, responded: 0, resolved: 0 });
-  const [filter, setFilter] = useState("all");
+  // The selected filter survives navigation: leave the list and come back,
+  // and the manager lands on the same filter they chose (e.g. Needs Attention).
+  const [filter, setFilter] = useState(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(REVIEWS_CONTEXT_KEY) || "null");
+      return saved && saved.filter ? saved.filter : "all";
+    } catch (e) {
+      return "all";
+    }
+  });
   const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(REVIEWS_CONTEXT_KEY, JSON.stringify({ filter }));
+    } catch (e) {
+      /* storage unavailable */
+    }
+  }, [filter]);
 
   const loadData = useCallback(async () => {
     const rid = getRestaurantId(user);

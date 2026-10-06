@@ -1,0 +1,41 @@
+{
+  "name": "Email Analysis",
+  "description": "Analyzes one imported Gmail message with the current Restaurant Profile as soon as it enters the analysis queue \u2014 each message independently, so a slow or failed analysis never blocks any other.",
+  "trigger": {
+    "config": {
+      "trigger_type": "entity",
+      "entity_name": "Conversation",
+      "events": [
+        "create",
+        "update"
+      ]
+    },
+    "condition": "${ (.trigger.data.analysis_state // \"\") == \"pending\" and (.trigger.data.source // \"\") == \"Gmail\" and (.trigger.data.is_demo // false) != true }"
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "email_analysis",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "analyze_message": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "analyzeEmails",
+            "args": {
+              "conversation_id": "${ .trigger.entity_id }"
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Analyze message",
+            "description": "One queued email analyzed independently"
+          }
+        }
+      }
+    ]
+  }
+}

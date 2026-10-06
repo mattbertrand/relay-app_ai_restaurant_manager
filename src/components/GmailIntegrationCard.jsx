@@ -34,6 +34,7 @@ function summaryText(summary) {
     parts.push(`${summary.reopened} reopened`);
   }
   if (summary.needsReview) parts.push(`${summary.needsReview} need review`);
+  if (summary.pendingAnalysis) parts.push(`${summary.pendingAnalysis} queued for analysis`);
   return parts.join(" · ") + ".";
 }
 
@@ -253,7 +254,7 @@ export default function GmailIntegrationCard() {
               <Button size="sm" variant="outline" onClick={runSync} disabled={syncing}>
                 {syncing ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Analyzing incoming messages…
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Syncing…
                   </>
                 ) : (
                   <>

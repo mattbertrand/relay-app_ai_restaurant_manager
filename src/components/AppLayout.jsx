@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { getRestaurantId, getInitials, setActiveTimezone } from "@/lib/format";
@@ -12,9 +12,9 @@ const ICON_MAP = { Sun, Target, Inbox, Star, CheckSquare, Settings };
 
 const NAV_ITEMS = [
   { label: "Today", path: "/today", icon: "Sun" },
-  { label: "Opportunities", path: "/opportunities", icon: "Target" },
-  { label: "Inbox", path: "/inbox", icon: "Inbox" },
-  { label: "Reviews", path: "/reviews", icon: "Star" },
+  { label: "Opportunities", path: "/opportunities", icon: "Target", countKey: "opportunities" },
+  { label: "Inbox", path: "/inbox", icon: "Inbox", countKey: "inbox" },
+  { label: "Reviews", path: "/reviews", icon: "Star", countKey: "reviews" },
   { label: "Actions", path: "/actions", icon: "CheckSquare" },
   { label: "Settings", path: "/settings", icon: "Settings" },
 ];
@@ -47,6 +47,40 @@ export default function AppLayout() {
       });
     return () => { cancelled = true; };
   }, [user]);
+
+  // Left-navigation workload counts — real numbers from this restaurant's
+  // data (new emails, new opportunities, reviews needing attention),
+  // refreshed when records change and on navigation. Never hard-coded.
+  const [navCounts, setNavCounts] = useState({ inbox: 0, opportunities: 0, reviews: 0 });
+  const navCountsTimer = useRef(null);
+  const loadNavCounts = useCallback(async () => {
+    try {
+      const [inbox, opportunities, reviews] = await Promise.all([
+        base44.entities.Conversation.count({ status: "New" }),
+        base44.entities.Opportunity.count({ status: "New" }),
+        base44.entities.Review.count({
+          manager_status: { $in: ["New", "In Progress"] },
+          classification: { $in: ["Opportunity", "Attention"] },
+        }),
+      ]);
+      setNavCounts({ inbox, opportunities, reviews });
+    } catch (e) {
+      /* counts are informational */
+    }
+  }, []);
+  const scheduleNavCounts = useCallback(() => {
+    if (navCountsTimer.current) clearTimeout(navCountsTimer.current);
+    navCountsTimer.current = setTimeout(loadNavCounts, 400);
+  }, [loadNavCounts]);
+  useEffect(() => { loadNavCounts(); }, [loadNavCounts, location.pathname]);
+  useEffect(() => {
+    const subs = [
+      base44.entities.Conversation.subscribe(scheduleNavCounts),
+      base44.entities.Opportunity.subscribe(scheduleNavCounts),
+      base44.entities.Review.subscribe(scheduleNavCounts),
+    ];
+    return () => subs.forEach((unsub) => unsub());
+  }, [scheduleNavCounts]);
 
   const handleLogout = () => {
     logout(false);
@@ -83,6 +117,16 @@ export default function AppLayout() {
               >
                 <Icon className="w-5 h-5" />
                 {item.label}
+                {item.countKey && navCounts[item.countKey] > 0 && (
+                  <span
+                    className={cn(
+                      "ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                      active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"
+                    )}
+                  >
+                    {navCounts[item.countKey]}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -149,6 +193,16 @@ export default function AppLayout() {
                   >
                     <Icon className="w-5 h-5" />
                     {item.label}
+                    {item.countKey && navCounts[item.countKey] > 0 && (
+                      <span
+                        className={cn(
+                          "ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                          active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"
+                        )}
+                      >
+                        {navCounts[item.countKey]}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
