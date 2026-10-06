@@ -190,6 +190,7 @@ export default function Inbox() {
   useEffect(() => {
     if (location.state?.focusConversationId) {
       setFilter("All");
+      setResponseFilter("All responses");
       setSource("all");
       return;
     }

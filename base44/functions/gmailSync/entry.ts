@@ -393,9 +393,12 @@ export default async function(req) {
         if (threadConvo) {
           // Existing thread: attach the reply, don't duplicate the conversation.
           // Inbox status is separate from the opportunity lifecycle — a new
-          // customer reply makes the message New again until reviewed.
+          // customer reply makes the message New again until reviewed. The
+          // workflow reopens too: a resolved matter with a new customer
+          // message isn't finished after all.
           await base44.entities.Conversation.update(threadConvo.id, {
             status: 'New',
+            workflow_status: threadConvo.workflow_status === 'Resolved' ? 'In Progress' : (threadConvo.workflow_status || 'New'),
             analysis_state: 'pending',
             analysis_error: '',
           });
