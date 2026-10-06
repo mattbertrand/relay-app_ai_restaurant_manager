@@ -11,6 +11,7 @@ import {
 import { PROVIDER_META } from "@/lib/reviewProviders";
 import RichDraft from "@/components/RichDraft";
 import BackToToday from "@/components/BackToToday";
+import FollowUpPrompt from "@/components/FollowUpPrompt";
 import RichDraftEditor from "@/components/RichDraftEditor";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +53,10 @@ export default function ReviewDetail() {
   const [publishOpen, setPublishOpen] = useState(false);
   const [reanalyzeOpen, setReanalyzeOpen] = useState(false);
   const [source, setSource] = useState(null);
+  // The follow-up prompt, shown once right after a meaningful action
+  // (publishing the response) — never on mere viewing or navigation.
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpSource, setFollowUpSource] = useState(null);
 
   const loadReview = useCallback(async () => {
     try {
@@ -154,6 +159,16 @@ export default function ReviewDetail() {
             ? "Recorded in Relay's history only — no live connection was contacted."
             : "Your response is now live on Google.",
         });
+        // Response recorded — the manager's one-tap chance to commit to a
+        // follow-up on this review (Skip dismisses it; Relay never re-asks).
+        setFollowUpSource({
+          type: "review",
+          id: review.id,
+          label: `${headerLabel || "Review"} — ${review.reviewer_name || "Unknown reviewer"}`,
+          summary: [review.category, review.review_text].filter(Boolean).join(" — ").slice(0, 400),
+          isDemo: !!review.is_demo,
+        });
+        setFollowUpOpen(true);
       } else {
         toast({ title: "Publication failed", description: d.error || "Please try again.", variant: "destructive" });
       }
@@ -523,6 +538,15 @@ export default function ReviewDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Follow-up prompt — shown once, right after the response was recorded */}
+      <FollowUpPrompt
+        open={followUpOpen}
+        onOpenChange={setFollowUpOpen}
+        source={followUpSource}
+        headline="Response recorded."
+        question="Anything else you want to do about this?"
+      />
 
       {/* Re-analysis confirmation — never overwrite a manager-edited draft silently */}
       <Dialog open={reanalyzeOpen} onOpenChange={setReanalyzeOpen}>

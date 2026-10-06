@@ -1,0 +1,148 @@
+{
+  "name": "Task",
+  "type": "object",
+  "description": "A follow-up task the manager explicitly committed to \u2014 tightly linked to the Relay item (review, email, opportunity, event) that created it. Tasks have their own lifecycle, independent of the source item's status: completing the source action never auto-completes the task.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional notes the manager added."
+    },
+    "task_type": {
+      "type": "string",
+      "enum": [
+        "Follow up",
+        "Call",
+        "Email",
+        "Discuss",
+        "Investigate",
+        "Check",
+        "Meeting",
+        "Customer follow-up",
+        "Internal follow-up",
+        "Other"
+      ],
+      "default": "Follow up"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Open",
+        "In Progress",
+        "Completed"
+      ],
+      "default": "Open"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "High",
+        "Normal",
+        "Low"
+      ],
+      "default": "Normal"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "review",
+        "email",
+        "opportunity",
+        "event",
+        "manual"
+      ],
+      "description": "The kind of Relay item this task came from \u2014 so the manager always understands why the task is here."
+    },
+    "source_id": {
+      "type": "string",
+      "description": "The id of the originating review, conversation, or opportunity. Clicking the source opens the item directly."
+    },
+    "source_label": {
+      "type": "string",
+      "description": "Human-readable source reference, e.g. 'Google Review \u2014 Daniel' or 'Email \u2014 Jane Smith'."
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Restaurant-local due date (YYYY-MM-DD). Empty when the manager expressed no date \u2014 never invented."
+    },
+    "due_time": {
+      "type": "string",
+      "description": "Optional due time (HH:mm), restaurant-local."
+    },
+    "reminder_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The scheduled reminder instant in UTC, computed from the due date/time in the restaurant's timezone."
+    },
+    "reminder_note": {
+      "type": "string",
+      "description": "A contextual trigger the manager expressed in their own words (e.g. 'when John arrives', 'after the investigation') \u2014 preserved verbatim, never converted into a fake date."
+    },
+    "reminder_status": {
+      "type": "string",
+      "enum": [
+        "none",
+        "pending",
+        "sent"
+      ],
+      "default": "none",
+      "description": "Whether a reminder is scheduled (pending), already delivered (sent), or not scheduled (none)."
+    },
+    "snooze_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When snoozed: the instant the task resurfaces. Snoozing changes the reminder/due schedule without creating a duplicate task."
+    },
+    "draft_email": {
+      "type": "string",
+      "description": "Optional draft email associated with the task (e.g. 'email the owner after we investigate'). Saved in Relay only \u2014 never sent automatically."
+    },
+    "draft_subject": {
+      "type": "string"
+    },
+    "draft_edited": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once the manager edited the task's draft email."
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_by": {
+      "type": "string"
+    },
+    "completion_note": {
+      "type": "string",
+      "description": "Optional short note recorded when the task is completed."
+    },
+    "created_via": {
+      "type": "string",
+      "description": "How the task was created, e.g. 'follow-up prompt after publishing a review response'."
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "title"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { conversationGroupKey, pickPrimaryConversation } from "@/lib/dedupe";
 import CorrectionDialog from "@/components/CorrectionDialog";
+import FollowUpPrompt from "@/components/FollowUpPrompt";
 import { Link } from "react-router-dom";
 import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp, Mail, Search, X, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,10 @@ export default function Inbox() {
   // The analysis queue state, separate from the Gmail import state.
   const [analysisCounts, setAnalysisCounts] = useState(null);
   const [retrying, setRetrying] = useState(false);
+  // The lightweight follow-up prompt, shown once right after the manager
+  // records a reply — never on viewing, filtering, or navigation.
+  const [followUpConvo, setFollowUpConvo] = useState(null);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
   // Email search — over the emails Relay has imported, including archived.
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
@@ -313,6 +318,10 @@ export default function Inbox() {
           customer_name: convo.customer_name,
         })
         .catch(() => {});
+      // Reply recorded — the manager's one-tap chance to commit to a
+      // follow-up on this email (Skip dismisses it; Relay never re-asks).
+      setFollowUpConvo(convo);
+      setFollowUpOpen(true);
       loadData();
     } catch (err) {
       console.error(err);
@@ -754,6 +763,24 @@ export default function Inbox() {
         onOpenChange={(o) => { if (!o) setCorrecting(null); }}
         convo={correcting}
         onDone={loadData}
+      />
+
+      <FollowUpPrompt
+        open={followUpOpen}
+        onOpenChange={(o) => { if (!o) setFollowUpOpen(false); }}
+        source={
+          followUpConvo
+            ? {
+                type: "email",
+                id: followUpConvo.id,
+                label: `Email — ${followUpConvo.customer_name}`,
+                summary: `${followUpConvo.subject} — ${String(followUpConvo.message || "").slice(0, 300)}`,
+                isDemo: !!followUpConvo.is_demo,
+              }
+            : null
+        }
+        headline="Reply recorded."
+        question="Anything else you want to follow up on?"
       />
     </div>
   );

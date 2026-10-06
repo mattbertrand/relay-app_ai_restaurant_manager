@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import HeaderSummary from "@/components/today/HeaderSummary";
 import ScheduleSection from "@/components/today/ScheduleSection";
 import NeedsActionSection from "@/components/today/NeedsActionSection";
+import FollowUpsSection from "@/components/today/FollowUpsSection";
 import NewEmailsSection from "@/components/today/NewEmailsSection";
 import ReviewsSection from "@/components/today/ReviewsSection";
 import UpcomingSection from "@/components/today/UpcomingSection";
@@ -65,6 +66,7 @@ export default function Today() {
       <HeaderSummary name={data.manager_first_name} counts={data.counts} />
 
       <ScheduleSection schedule={data.schedule} onScheduleChanged={loadData} />
+      <FollowUpsSection items={data.follow_up_tasks} />
       <NewEmailsSection emails={data.emails} />
       <ReviewsSection reviews={data.reviews} />
       <UpcomingSection

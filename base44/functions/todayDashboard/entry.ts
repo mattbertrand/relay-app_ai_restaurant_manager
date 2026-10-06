@@ -42,12 +42,16 @@ export default async function(req) {
       return Response.json({ error: 'No restaurant is set up for this account yet.' }, { status: 400 });
     }
 
-    const [knowledge, convoPage, oppPage, actionPage, reviewPage] = await Promise.all([
+    const [knowledge, convoPage, oppPage, actionPage, reviewPage, taskPage] = await Promise.all([
       loadKnowledge(base44, restaurantId),
       base44.entities.Conversation.filter({ restaurant_id: restaurantId }, { sort: "-created_date", limit: 300 }),
       base44.entities.Opportunity.filter({ restaurant_id: restaurantId }, { sort: "-created_date", limit: 300 }),
       base44.entities.Action.filter({ restaurant_id: restaurantId }, { sort: "-created_date", limit: 200 }),
       base44.entities.Review.filter({ restaurant_id: restaurantId }, { sort: "-created_date", limit: 300 }),
+      base44.entities.Task.filter(
+        { restaurant_id: restaurantId, status: { $in: ["Open", "In Progress"] } },
+        { sort: "due_date", limit: 200 }
+      ),
     ]);
     const convos = convoPage.items || [];
     const opps = oppPage.items || [];
@@ -241,6 +245,41 @@ export default async function(req) {
       if (!o.name || !o.days || !new RegExp(`\\b${o.days.split(/[,/]/)[0].trim()}\\b`, "i").test(weekday) && !o.days.toLowerCase().includes(weekday.toLowerCase())) continue;
       todayItems.push({ date: today, label: `${o.name}${o.time ? ` — ${o.time}` : ""}` });
     }
+    // ---- Your Follow-ups: tasks the manager explicitly committed to —
+    // due today (by time) first, then overdue. Snoozed tasks stay quiet
+    // until the snooze passes. Deliberately separate from Needs Action
+    // (what Relay identified) — this is what the MANAGER decided to do.
+    const nowMs = Date.now();
+    const activeTasks = (taskPage.items || []).filter((t) => {
+      if (t.snooze_until) {
+        const until = Date.parse(t.snooze_until);
+        if (until && until > nowMs) return false;
+      }
+      return true;
+    });
+    const taskRow = (t, overdue) => ({
+      id: t.id,
+      title: t.title,
+      due_date: t.due_date || "",
+      due_time: t.due_time || "",
+      overdue,
+      priority: t.priority || "Normal",
+      source_type: t.source_type || "",
+      source_id: t.source_id || "",
+      source_label: t.source_label || "",
+      reminder_note: t.reminder_note || "",
+    });
+    const tasksToday = activeTasks
+      .filter((t) => t.due_date === today)
+      .sort((a, b) => String(a.due_time || "99:99").localeCompare(String(b.due_time || "99:99")));
+    const tasksOverdue = activeTasks
+      .filter((t) => t.due_date && t.due_date < today)
+      .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
+    const followUps = [
+      ...tasksToday.map((t) => taskRow(t, false)),
+      ...tasksOverdue.map((t) => taskRow(t, true)),
+    ].slice(0, 8);
+
     todayItems.sort((a, b) => a.date.localeCompare(b.date));
     upcomingItems.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -249,10 +288,12 @@ export default async function(req) {
       counts: {
         need_action: queue.length,
         follow_ups: pendingFollowUps.length,
+        tasks: tasksToday.length + tasksOverdue.length,
         new_emails: newConvos.length,
         new_reviews: newReviews.length,
         scheduled_today: schedule.connected ? schedule.today.length : 0,
       },
+      follow_up_tasks: followUps,
       need_action: queue.slice(0, 200),
       emails: { new: newConvos.length, breakdown },
       reviews: {

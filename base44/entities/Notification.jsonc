@@ -1,0 +1,72 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "description": "An in-app notification for the manager (task reminders, overdue tasks). Extensible: email/push delivery can be added later without changing the model. Notifications link directly to their task and are never repeated endlessly for the same overdue task.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "task_reminder",
+        "task_overdue"
+      ],
+      "description": "What the notification is about. More types (email digest, push) can be added later."
+    },
+    "title": {
+      "type": "string",
+      "description": "Short headline, e.g. 'Reminder' or 'Task overdue'."
+    },
+    "body": {
+      "type": "string",
+      "description": "The task title or short message."
+    },
+    "task_id": {
+      "type": "string",
+      "description": "The task this notification points to \u2014 clicking it opens the task."
+    },
+    "task_title": {
+      "type": "string"
+    },
+    "due_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "delivery_channel": {
+      "type": "string",
+      "enum": [
+        "in_app",
+        "email",
+        "push"
+      ],
+      "default": "in_app",
+      "description": "How this notification was (or should be) delivered. Only in_app is used today."
+    },
+    "read_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the manager opened this notification; empty while unread."
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "type",
+    "title",
+    "body"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

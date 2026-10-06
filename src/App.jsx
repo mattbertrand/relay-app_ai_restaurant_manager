@@ -22,6 +22,7 @@ import Inbox from '@/pages/Inbox';
 import Reviews from '@/pages/Reviews';
 import ReviewDetail from '@/pages/ReviewDetail';
 import Actions from '@/pages/Actions';
+import Tasks from '@/pages/Tasks';
 import Settings from '@/pages/Settings';
 import RestaurantKnowledge from '@/pages/RestaurantKnowledge';
 
@@ -66,6 +67,7 @@ const AuthenticatedApp = () => {
           <Route path="/reviews" element={<Reviews />} />
           <Route path="/reviews/:id" element={<ReviewDetail />} />
           <Route path="/actions" element={<Actions />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route path="/knowledge" element={<RestaurantKnowledge />} />
           <Route path="/settings" element={<Settings />} />
         </Route>

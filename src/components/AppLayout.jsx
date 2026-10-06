@@ -1,20 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
-import { getRestaurantId, getInitials, setActiveTimezone } from "@/lib/format";
+import { getRestaurantId, getInitials, setActiveTimezone, todayInTimezone } from "@/lib/format";
 import { base44 } from "@/api/base44Client";
-import { Sun, Target, Inbox, Star, CheckSquare, Settings, LogOut, Menu, X } from "lucide-react";
+import { Sun, Target, Inbox, Star, CheckSquare, Settings, LogOut, Menu, X, ClipboardList } from "lucide-react";
+import NotificationBell from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import UnsavedChangesGuard from "@/components/UnsavedChangesGuard";
 
-const ICON_MAP = { Sun, Target, Inbox, Star, CheckSquare, Settings };
+const ICON_MAP = { Sun, Target, Inbox, Star, CheckSquare, Settings, ClipboardList };
 
 const NAV_ITEMS = [
   { label: "Today", path: "/today", icon: "Sun" },
   { label: "Opportunities", path: "/opportunities", icon: "Target", countKey: "opportunities" },
   { label: "Inbox", path: "/inbox", icon: "Inbox", countKey: "inbox" },
   { label: "Reviews", path: "/reviews", icon: "Star", countKey: "reviews" },
+  { label: "Tasks", path: "/tasks", icon: "ClipboardList", countKey: "tasks" },
   { label: "Actions", path: "/actions", icon: "CheckSquare" },
   { label: "Settings", path: "/settings", icon: "Settings" },
 ];
@@ -51,19 +53,24 @@ export default function AppLayout() {
   // Left-navigation workload counts — real numbers from this restaurant's
   // data (new emails, new opportunities, reviews needing attention),
   // refreshed when records change and on navigation. Never hard-coded.
-  const [navCounts, setNavCounts] = useState({ inbox: 0, opportunities: 0, reviews: 0 });
+  const [navCounts, setNavCounts] = useState({ inbox: 0, opportunities: 0, reviews: 0, tasks: 0 });
   const navCountsTimer = useRef(null);
   const loadNavCounts = useCallback(async () => {
     try {
-      const [inbox, opportunities, reviews] = await Promise.all([
+      // Tasks count: open follow-ups due today or overdue (in restaurant time).
+      const [inbox, opportunities, reviews, tasks] = await Promise.all([
         base44.entities.Conversation.count({ status: "New" }),
         base44.entities.Opportunity.count({ status: "New" }),
         base44.entities.Review.count({
           manager_status: { $in: ["New", "In Progress"] },
           classification: { $in: ["Opportunity", "Attention"] },
         }),
+        base44.entities.Task.count({
+          status: { $in: ["Open", "In Progress"] },
+          due_date: { $lte: todayInTimezone() },
+        }),
       ]);
-      setNavCounts({ inbox, opportunities, reviews });
+      setNavCounts({ inbox, opportunities, reviews, tasks });
     } catch (e) {
       /* counts are informational */
     }
@@ -78,6 +85,7 @@ export default function AppLayout() {
       base44.entities.Conversation.subscribe(scheduleNavCounts),
       base44.entities.Opportunity.subscribe(scheduleNavCounts),
       base44.entities.Review.subscribe(scheduleNavCounts),
+      base44.entities.Task.subscribe(scheduleNavCounts),
     ];
     return () => subs.forEach((unsub) => unsub());
   }, [scheduleNavCounts]);
@@ -140,6 +148,7 @@ export default function AppLayout() {
               <p className="text-sm font-medium text-foreground truncate">{userName}</p>
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
+            <NotificationBell />
           </div>
           <Button
             variant="ghost"
@@ -161,9 +170,12 @@ export default function AppLayout() {
           </div>
           <span className="font-heading text-lg font-semibold">Relay</span>
         </Link>
-        <button onClick={() => setMobileOpen(true)} className="p-2 -mr-2">
-          <Menu className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button onClick={() => setMobileOpen(true)} className="p-2 -mr-2">
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       {/* Mobile drawer */}

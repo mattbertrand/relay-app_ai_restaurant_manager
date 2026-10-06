@@ -29,6 +29,11 @@ export const ACTIVITY_LABELS = {
   review_owner_response: "Owner response detected",
   review_response_published: "Response published",
   review_response_publish_failed: "Response publication failed",
+  task_created: "Follow-up task created",
+  task_updated: "Follow-up task updated",
+  task_completed: "Follow-up task completed",
+  task_reopened: "Follow-up task reopened",
+  task_snoozed: "Follow-up snoozed",
 };
 
 // Internal bookkeeping that never belongs in the manager-facing history.

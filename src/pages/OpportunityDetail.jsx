@@ -14,6 +14,7 @@ import {
 import { NEW_STATUSES, lifecycleStatus, nextStepFor } from "@/lib/opportunityLifecycle";
 import LifecycleStepper from "@/components/LifecycleStepper";
 import BackToToday from "@/components/BackToToday";
+import FollowUpPrompt from "@/components/FollowUpPrompt";
 import PreviousAnalysis from "@/components/PreviousAnalysis";
 import ReanalyzeButton from "@/components/ReanalyzeButton";
 import ResolveDialog from "@/components/ResolveDialog";
@@ -50,6 +51,19 @@ export default function OpportunityDetail() {
   const [draftUpdated, setDraftUpdated] = useState(false);
   const [dismissOpen, setDismissOpen] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
+  // The follow-up prompt, shown once when a New opportunity moves to
+  // In Progress through an explicit manager action — easy to skip, and it
+  // never re-asks about the same transition.
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpSource, setFollowUpSource] = useState(null);
+
+  const opportunityFollowUpSource = (o) => ({
+    type: "opportunity",
+    id: o.id,
+    label: `${o.type || "Opportunity"} — ${o.customer_name || "Customer"}`,
+    summary: `${o.title}${o.description ? ` — ${o.description}` : ""}`.slice(0, 400),
+    isDemo: !!o.is_demo,
+  });
 
   // Contextual navigation: opened from the Inbox returns to the Inbox.
   const fromInbox = location.state?.backTo === "inbox";
@@ -140,6 +154,10 @@ export default function OpportunityDetail() {
       setOpp({ ...opp, draft_response: draft, draft_status: "Edited", ...statusUpdate });
       setEditing(false);
       setDraftUpdated(true);
+      if (statusUpdate.status) {
+        setFollowUpSource(opportunityFollowUpSource(opp));
+        setFollowUpOpen(true);
+      }
       return true;
     } catch (err) {
       console.error(err);
@@ -165,10 +183,15 @@ export default function OpportunityDetail() {
   });
 
   const handleApprove = async () => {
+    const wasNew = NEW_STATUSES.includes(opp.status);
     setActionLoading(true);
     try {
       await approveResponse(opp);
       setOpp({ ...opp, status: "In Progress", draft_status: "Approved" });
+      if (wasNew) {
+        setFollowUpSource(opportunityFollowUpSource(opp));
+        setFollowUpOpen(true);
+      }
       loadData();
     } catch (err) {
       console.error(err);
@@ -542,6 +565,15 @@ export default function OpportunityDetail() {
           )}
         </div>
       )}
+
+      {/* Follow-up prompt — shown once, when the opportunity moved to In Progress */}
+      <FollowUpPrompt
+        open={followUpOpen}
+        onOpenChange={setFollowUpOpen}
+        source={followUpSource}
+        headline="Opportunity moved to In Progress."
+        question="Do you want to create a follow-up for this opportunity?"
+      />
 
       <ResolveDialog
         open={resolveOpen}
