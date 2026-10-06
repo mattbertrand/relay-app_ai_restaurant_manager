@@ -58,16 +58,24 @@ export default async function(req) {
       });
 
       // 1. Reminders that have come due → one in-app notification each.
+      //    Tasks already past due are handled by the overdue branch only —
+      //    they get a single overdue notice, never both.
       const dueReminders = active.filter(
-        (t) => t.reminder_status === "pending" && t.reminder_at && t.reminder_at <= nowIso
+        (t) =>
+          t.reminder_status === "pending" &&
+          t.reminder_at &&
+          t.reminder_at <= nowIso &&
+          !(t.due_date && t.due_date < today)
       );
+      const existingOf = (page) => (Array.isArray(page) ? page : page.items || []);
       for (const t of dueReminders) {
-        const dup = await svc.entities.Notification.filter(
-          { restaurant_id: r.id, task_id: t.id, type: "task_reminder", due_at: t.reminder_at },
-          null,
-          1
+        const dup = existingOf(
+          await svc.entities.Notification.filter(
+            { restaurant_id: r.id, task_id: t.id, type: "task_reminder", due_at: t.reminder_at },
+            { limit: 1 }
+          )
         );
-        if (!dup.items || !dup.items.length) {
+        if (!dup.length) {
           await svc.entities.Notification.create({
             restaurant_id: r.id,
             type: "task_reminder",
@@ -87,12 +95,13 @@ export default async function(req) {
       //    Today keep showing the overdue state without new notifications.
       const overdueTasks = active.filter((t) => t.due_date && t.due_date < today);
       for (const t of overdueTasks) {
-        const dup = await svc.entities.Notification.filter(
-          { restaurant_id: r.id, task_id: t.id, type: "task_overdue" },
-          null,
-          1
+        const dup = existingOf(
+          await svc.entities.Notification.filter(
+            { restaurant_id: r.id, task_id: t.id, type: "task_overdue" },
+            { limit: 1 }
+          )
         );
-        if (dup.items && dup.items.length) continue;
+        if (dup.length) continue;
         await svc.entities.Notification.create({
           restaurant_id: r.id,
           type: "task_overdue",
@@ -103,6 +112,10 @@ export default async function(req) {
           due_at: `${t.due_date}T12:00:00Z`,
           delivery_channel: "in_app",
         });
+        // An overdue task's pending reminder is superseded by this notice.
+        if (t.reminder_status === "pending") {
+          await svc.entities.Task.update(t.id, { reminder_status: "sent" });
+        }
         overdue++;
       }
     }
