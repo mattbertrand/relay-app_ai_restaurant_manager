@@ -21,8 +21,14 @@ const FILTERS = [
 // The Reviews list state (the selected filter) survives navigation.
 const REVIEWS_CONTEXT_KEY = "relay-reviews-context";
 
-function matchesFilter(review, filter) {
-  if (filter === "all") return true;
+function matchesFilter(review, filter, lifecycle) {
+  if (filter === "all") {
+    // Lifecycle filter inside All Reviews: New shows only reviews the manager
+    // hasn't seen yet; Resolved ones are gone from New once resolved.
+    if (lifecycle === "New") return review.manager_status === "New";
+    if (lifecycle === "Resolved") return review.manager_status === "Resolved";
+    return true;
+  }
   if (filter === "attention") {
     return (
       ["New", "In Progress"].includes(review.manager_status) &&
@@ -39,7 +45,7 @@ export default function Reviews() {
   const { toast } = useToast();
   const [sources, setSources] = useState(null);
   const [reviews, setReviews] = useState(null);
-  const [counts, setCounts] = useState({ all: 0, attention: 0, responded: 0, resolved: 0 });
+  const [counts, setCounts] = useState({ all: 0, attention: 0, responded: 0, resolved: 0, new: 0 });
   // The selected filter survives navigation: leave the list and come back,
   // and the manager lands on the same filter they chose (e.g. Needs Attention).
   const [filter, setFilter] = useState(() => {
@@ -50,21 +56,31 @@ export default function Reviews() {
       return "all";
     }
   });
+  // The lifecycle filter (New / Resolved inside All Reviews) survives
+  // navigation together with the list filter.
+  const [lifecycle, setLifecycle] = useState(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(REVIEWS_CONTEXT_KEY) || "null");
+      return saved && saved.lifecycle ? saved.lifecycle : "all";
+    } catch (e) {
+      return "all";
+    }
+  });
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(REVIEWS_CONTEXT_KEY, JSON.stringify({ filter }));
+      sessionStorage.setItem(REVIEWS_CONTEXT_KEY, JSON.stringify({ filter, lifecycle }));
     } catch (e) {
       /* storage unavailable */
     }
-  }, [filter]);
+  }, [filter, lifecycle]);
 
   const loadData = useCallback(async () => {
     const rid = getRestaurantId(user);
     if (!rid) return;
     try {
-      const [srcs, page, cAll, cAttention, cResponded, cResolved] = await Promise.all([
+      const [srcs, page, cAll, cAttention, cResponded, cResolved, cNew] = await Promise.all([
         base44.entities.ReviewSource.filter({ restaurant_id: rid }, null, 10),
         base44.entities.Review.filter({ restaurant_id: rid }, { sort: "-first_seen_at", limit: 50 }),
         base44.entities.Review.count({ restaurant_id: rid }),
@@ -75,10 +91,11 @@ export default function Reviews() {
         }),
         base44.entities.Review.count({ restaurant_id: rid, response_status: "published" }),
         base44.entities.Review.count({ restaurant_id: rid, manager_status: "Resolved" }),
+        base44.entities.Review.count({ restaurant_id: rid, manager_status: "New" }),
       ]);
       setSources(srcs || []);
       setReviews((page && page.items) || []);
-      setCounts({ all: cAll, attention: cAttention, responded: cResponded, resolved: cResolved });
+      setCounts({ all: cAll, attention: cAttention, responded: cResponded, resolved: cResolved, new: cNew });
     } catch (err) {
       console.error(err);
     }
@@ -134,7 +151,7 @@ export default function Reviews() {
   const googleSource = sources.find((s) => s.provider === "google");
   const demoSource = sources.find((s) => s.provider === "demo");
   const demoReviewCount = reviews.filter((r) => r.is_demo).length;
-  const filtered = reviews.filter((r) => matchesFilter(r, filter));
+  const filtered = reviews.filter((r) => matchesFilter(r, filter, lifecycle));
 
   return (
     <div className="p-5 md:p-8 max-w-4xl mx-auto pb-20 md:pb-8">
@@ -192,6 +209,32 @@ export default function Reviews() {
         ))}
       </div>
 
+      {filter === "all" && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {[
+            { id: "all", label: "All statuses" },
+            { id: "New", label: "New" },
+            { id: "Resolved", label: "Resolved" },
+          ].map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setLifecycle(s.id)}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                lifecycle === s.id
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {s.label}
+              {s.id === "New" && counts.new ? ` (${counts.new})` : ""}
+              {s.id === "Resolved" && counts.resolved ? ` (${counts.resolved})` : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         filter === "all" ? (
           <div className="bg-card rounded-xl border border-border p-10 text-center">
@@ -208,6 +251,8 @@ export default function Reviews() {
               ? "Nothing needs attention right now."
               : filter === "responded"
               ? "No published responses yet."
+              : lifecycle === "New"
+              ? "No new reviews right now."
               : "No resolved reviews yet."}
           </p>
         )
