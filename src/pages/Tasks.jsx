@@ -6,6 +6,7 @@ import { getRestaurantId, todayInTimezone, formatTime12 } from "@/lib/format";
 import BackToToday from "@/components/BackToToday";
 import TaskCard from "@/components/TaskCard";
 import TaskEditDialog from "@/components/TaskEditDialog";
+import TaskDraftDialog from "@/components/TaskDraftDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -35,6 +36,8 @@ export default function Tasks() {
   const [searching, setSearching] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftTask, setDraftTask] = useState(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const focusTaskId = (location.state && location.state.focusTaskId) || null;
@@ -212,7 +215,8 @@ export default function Tasks() {
               onReopen={reopenTask}
               onSnooze={snoozeTask}
               onEdit={(task) => { setEditTask(task); setEditOpen(true); }}
-              onSource={(task) => navigateToSource(navigate, task)}
+              onSource={(task) => navigateToSource(navigate, task, { fromTasks: true })}
+              onDraft={(task) => { setDraftTask(task); setDraftOpen(true); }}
               onUpdate={async (patch) => {
                 await base44.entities.Task.update(t.id, patch);
                 await load();
@@ -285,7 +289,8 @@ export default function Tasks() {
                     onReopen={reopenTask}
                     onSnooze={snoozeTask}
                     onEdit={(task) => { setEditTask(task); setEditOpen(true); }}
-                    onSource={(task) => navigateToSource(navigate, task)}
+                    onSource={(task) => navigateToSource(navigate, task, { fromTasks: true })}
+                    onDraft={(task) => { setDraftTask(task); setDraftOpen(true); }}
                     onUpdate={async (patch) => {
                       await base44.entities.Task.update(t.id, patch);
                       await load();
@@ -304,6 +309,24 @@ export default function Tasks() {
         task={editTask}
         onSave={saveEdits}
         loading={saving}
+      />
+
+      <TaskDraftDialog
+        open={draftOpen}
+        onOpenChange={setDraftOpen}
+        task={draftTask}
+        onSaved={(updated) => {
+          setDraftTask(updated);
+          // Patch the task in place so the card reflects the saved draft.
+          setTasks((cur) =>
+            cur
+              ? {
+                  active: cur.active.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)),
+                  completed: (cur.completed || []).map((t) => (t.id === updated.id ? { ...t, ...updated } : t)),
+                }
+              : cur
+          );
+        }}
       />
     </div>
   );

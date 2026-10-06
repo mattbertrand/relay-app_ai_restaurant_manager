@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import StatusBadge from "@/components/StatusBadge";
 import {
@@ -43,6 +43,8 @@ const RESPONSE_STATUS = {
 
 export default function ReviewDetail() {
   const { id } = useParams();
+  const location = useLocation();
+  const fromTasks = location.state?.backTo === "tasks";
   const { toast } = useToast();
   const [review, setReview] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -245,12 +247,21 @@ export default function ReviewDetail() {
   return (
     <div className="p-5 md:p-8 max-w-3xl mx-auto pb-20 md:pb-8">
       <BackToToday label="Reviews" />
-      <Link
-        to="/reviews"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Reviews
-      </Link>
+      {fromTasks ? (
+        <Link
+          to="/tasks"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Follow-ups
+        </Link>
+      ) : (
+        <Link
+          to="/reviews"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Reviews
+        </Link>
+      )}
 
       {/* Header */}
       <div className="mb-6">

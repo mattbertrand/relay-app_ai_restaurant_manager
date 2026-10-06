@@ -11,16 +11,22 @@ import { conversationGroupKey, pickPrimaryConversation } from "@/lib/dedupe";
 import CorrectionDialog from "@/components/CorrectionDialog";
 import FollowUpPrompt from "@/components/FollowUpPrompt";
 import { Link } from "react-router-dom";
-import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp, Mail, Search, X, AlertTriangle } from "lucide-react";
+import { Inbox as InboxIcon, RefreshCw, Loader2, ChevronDown, ChevronUp, Mail, Search, X, AlertTriangle, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { htmlToPlainText } from "@/lib/draftText";
 import { timeAgo } from "@/lib/format";
+import {
+  WORKFLOW_FILTERS,
+  RESPONSE_FILTERS,
+  effectiveWorkflow,
+  effectiveResponse,
+} from "@/lib/workflowStatus";
 
-// Inbox message lifecycle — what happened with this email: New (needs
-// attention), Reply recorded (responded in Relay), or Archived (out of the
-// active inbox, never deleted). Separate from the opportunity lifecycle
-// (New → In Progress → Resolved) on the Opportunities page.
-const FILTERS = ["All", "New", "Reply recorded", "Archived"];
+// Two separate concepts, shown separately:
+// A. Workflow status — the underlying matter: New → In Progress → Resolved
+//    (→ Archived), synced with the linked Opportunity.
+// B. Response status — did the manager record a reply: Needs Response /
+//    Response Recorded.
 const SOURCES = [
   { label: "All", value: "all" },
   { label: "Live Gmail", value: "gmail" },
@@ -31,7 +37,8 @@ const INBOX_CONTEXT_KEY = "relay-inbox-context";
 
 export default function Inbox() {
   const [conversations, setConversations] = useState(null);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState("All"); // workflow status
+  const [responseFilter, setResponseFilter] = useState("All responses");
   const [source, setSource] = useState("all");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -84,15 +91,25 @@ export default function Inbox() {
     }
   }, []);
 
+  // Workflow counts over every stored conversation, plus how many have a
+  // recorded response — real numbers, so filters always reconcile.
   const loadStatusCounts = useCallback(async () => {
     try {
-      const [all, news, replied, archived] = await Promise.all([
-        base44.entities.Conversation.count({}),
-        base44.entities.Conversation.count({ status: "New" }),
-        base44.entities.Conversation.count({ status: "Reply recorded" }),
-        base44.entities.Conversation.count({ status: "Archived" }),
+      const [wfAgg, respAgg] = await Promise.all([
+        base44.entities.Conversation.aggregate({ groupBy: "workflow_status" }),
+        base44.entities.Conversation.aggregate({ groupBy: "status" }),
       ]);
-      setStatusCounts({ All: all, "New": news, "Reply recorded": replied, "Archived": archived });
+      const wf = { All: 0 };
+      for (const row of wfAgg.rows || []) {
+        const key = row.workflow_status || "New";
+        wf[key] = (wf[key] || 0) + row.count;
+        wf.All += row.count;
+      }
+      let recorded = 0;
+      for (const row of respAgg.rows || []) {
+        if (row.status === "Reply recorded") recorded += row.count;
+      }
+      setStatusCounts({ workflow: wf, recorded });
     } catch (err) {
       /* counts are informational */
     }
@@ -184,7 +201,10 @@ export default function Inbox() {
     try {
       const saved = JSON.parse(sessionStorage.getItem(INBOX_CONTEXT_KEY) || "null");
       if (saved) {
-        if (saved.filter) setFilter(saved.filter);
+        if (saved.filter && WORKFLOW_FILTERS.includes(saved.filter)) setFilter(saved.filter);
+        if (saved.responseFilter && RESPONSE_FILTERS.includes(saved.responseFilter)) {
+          setResponseFilter(saved.responseFilter);
+        }
         if (saved.source) setSource(saved.source);
         pendingScrollRef.current = saved.scrollY || 0;
       }
@@ -206,13 +226,13 @@ export default function Inbox() {
       try {
         sessionStorage.setItem(
           INBOX_CONTEXT_KEY,
-          JSON.stringify({ filter, source, scrollY: scrollPosRef.current })
+          JSON.stringify({ filter, responseFilter, source, scrollY: scrollPosRef.current })
         );
       } catch (e) {
         /* storage unavailable */
       }
     };
-  }, [filter, source]);
+  }, [filter, responseFilter, source]);
 
   // Once the list is rendered: focus the requested message, or restore the
   // previous scroll position.
@@ -238,7 +258,10 @@ export default function Inbox() {
   // the message stays in the mailbox as the source of truth.
   const archiveConversation = useCallback(async (convo) => {
     try {
-      await base44.entities.Conversation.update(convo.id, { status: "Archived" });
+      await base44.entities.Conversation.update(convo.id, {
+        status: "Archived",
+        workflow_status: "Archived",
+      });
       await base44.entities.Activity.create({
         restaurant_id: convo.restaurant_id,
         type: "archived",
@@ -255,7 +278,12 @@ export default function Inbox() {
   // draft, response history, classification, and linked opportunity intact.
   const moveToNew = useCallback(async (convo) => {
     try {
-      await base44.entities.Conversation.update(convo.id, { status: "New" });
+      await base44.entities.Conversation.update(convo.id, {
+        status: "New",
+        // Undoing an archive returns the workflow to New too; otherwise the
+        // workflow state is untouched (it belongs to the linked opportunity).
+        workflow_status: convo.workflow_status === "Archived" ? "New" : convo.workflow_status || "New",
+      });
       await base44.entities.Activity.create({
         restaurant_id: convo.restaurant_id,
         type: "moved_to_new",
@@ -404,7 +432,11 @@ export default function Inbox() {
   };
 
   const filtered = (conversations || []).filter((c) => {
-    const statusOk = filter === "All" || c.status === filter;
+    // A. Workflow status — is this new, in progress, resolved, or archived?
+    const workflowOk = filter === "All" || effectiveWorkflow(c) === filter;
+    // B. Response status — did the manager record a reply?
+    const responseOk =
+      responseFilter === "All responses" || effectiveResponse(c) === responseFilter;
     // "Needs review" gathers messages Relay hasn't classified yet, including
     // ones whose analysis failed — they all need a human look.
     const analysisOk =
@@ -413,7 +445,7 @@ export default function Inbox() {
         ? !c.analysis_status || c.analysis_status === "Not analyzed" || c.analysis_status === "Needs review"
         : c.analysis_status === analysisFilter);
     const sourceOk = source === "all" || (source === "gmail" && c.source === "Gmail" && !c.is_demo);
-    return statusOk && analysisOk && sourceOk;
+    return workflowOk && responseOk && analysisOk && sourceOk;
   });
   const isLive = (c) => c.source === "Gmail" && !c.is_demo;
 
@@ -447,6 +479,16 @@ export default function Inbox() {
   return (
     <div className="p-5 md:p-8 max-w-5xl mx-auto pb-20 md:pb-8">
       <BackToToday label="Inbox" />
+      {location.state?.backTo === "tasks" && (
+        <div className="mb-3">
+          <Link
+            to="/tasks"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Follow-ups
+          </Link>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="font-heading text-2xl md:text-3xl font-semibold text-foreground">Inbox</h1>
@@ -577,9 +619,9 @@ export default function Inbox() {
         </div>
       )}
 
-      {/* Inbox lifecycle filter counts — dynamic and reconciling */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-1 px-1">
-        {FILTERS.map((f) => (
+      {/* Workflow status filters — is this new, in progress, resolved, archived? */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-2 -mx-1 px-1">
+        {WORKFLOW_FILTERS.map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -590,7 +632,26 @@ export default function Inbox() {
                 : "bg-card text-muted-foreground hover:text-foreground border-border"
             )}
           >
-            {f} {statusCounts ? statusCounts[f] : ""}
+            {f} {statusCounts && statusCounts.workflow ? statusCounts.workflow[f] : ""}
+          </button>
+        ))}
+      </div>
+
+      {/* Response status — did the manager record a reply? Separate from the workflow above. */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-1 px-1">
+        {RESPONSE_FILTERS.map((f) => (
+          <button
+            key={f}
+            onClick={() => setResponseFilter(f)}
+            className={cn(
+              "px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors border",
+              responseFilter === f
+                ? "bg-muted text-foreground border-border"
+                : "bg-transparent text-muted-foreground border-transparent hover:text-foreground"
+            )}
+          >
+            {f}
+            {f === "Response Recorded" && statusCounts ? ` ${statusCounts.recorded}` : ""}
           </button>
         ))}
       </div>

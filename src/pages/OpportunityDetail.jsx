@@ -30,6 +30,7 @@ import { activityLabel, isUserFacingActivity } from "@/lib/activityLabels";
 import { cn } from "@/lib/utils";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 import { htmlToPlainText } from "@/lib/draftText";
+import { syncConversationWorkflow } from "@/lib/workflowStatus";
 
 const DRAFT_STATUS_STYLES = {
   Draft: "bg-stone-100 text-stone-500 border-stone-200",
@@ -65,8 +66,10 @@ export default function OpportunityDetail() {
     isDemo: !!o.is_demo,
   });
 
-  // Contextual navigation: opened from the Inbox returns to the Inbox.
+  // Contextual navigation: opened from the Inbox returns to the Inbox; from
+  // a follow-up, back to Follow-ups.
   const fromInbox = location.state?.backTo === "inbox";
+  const fromTasks = location.state?.backTo === "tasks";
   const sourceConvo = (linkedConversations || [])[0];
 
   // An opportunity's history is exactly: its own events, plus the events of
@@ -150,6 +153,7 @@ export default function OpportunityDetail() {
           type: "status_changed",
           description: "Opportunity moved to In Progress — draft response edited",
         });
+        await syncConversationWorkflow(id, "In Progress", opp.restaurant_id, opp.title);
       }
       setOpp({ ...opp, draft_response: draft, draft_status: "Edited", ...statusUpdate });
       setEditing(false);
@@ -267,7 +271,14 @@ export default function OpportunityDetail() {
 
   return (
     <div className="p-5 md:p-8 max-w-3xl mx-auto pb-20 md:pb-8">
-      {fromInbox ? (
+      {fromTasks ? (
+        <Link
+          to="/tasks"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Follow-ups
+        </Link>
+      ) : fromInbox ? (
         <button
           onClick={() => navigate("/inbox")}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"

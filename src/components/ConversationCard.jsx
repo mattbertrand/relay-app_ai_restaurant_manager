@@ -10,7 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Mail, Archive, AlertCircle, Undo2, Loader2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { categoryLabel } from "@/lib/classification";
+import { effectiveWorkflow, effectiveResponse } from "@/lib/workflowStatus";
 import { cn } from "@/lib/utils";
+
+// Workflow state of the underlying matter — visually distinct from the
+// response state, so "am I working on this?" and "did I respond?" are both
+// answerable at a glance.
+const WORKFLOW_BADGE = {
+  New: "bg-amber-50 text-amber-700 border-amber-200",
+  "In Progress": "bg-blue-50 text-blue-700 border-blue-200",
+  Resolved: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Archived: "bg-stone-100 text-stone-500 border-stone-200",
+};
 
 // One inbox conversation. The Inbox lifecycle (New → Reply recorded → Archived)
 // is the state of the message itself — separate from the related opportunity's
@@ -51,7 +62,24 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
                   Demo data
                 </span>
               ) : null}
-              <StatusBadge status={convo.status} />
+              <span
+                className={cn(
+                  "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap",
+                  WORKFLOW_BADGE[effectiveWorkflow(convo)] || WORKFLOW_BADGE.New
+                )}
+              >
+                {effectiveWorkflow(convo)}
+              </span>
+              <span
+                className={cn(
+                  "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap",
+                  effectiveResponse(convo) === "Response Recorded"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-stone-50 text-stone-600 border-stone-200"
+                )}
+              >
+                {effectiveResponse(convo)}
+              </span>
             </div>
           </div>
           {isLive && convo.customer_email && (

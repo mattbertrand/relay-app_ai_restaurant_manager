@@ -106,6 +106,10 @@
     "draft_subject": {
       "type": "string"
     },
+    "draft_recipient": {
+      "type": "string",
+      "description": "Who the task's draft email is addressed to \u2014 a person, role, or team (e.g. 'Banquet Manager', 'Josh')."
+    },
     "draft_edited": {
       "type": "boolean",
       "default": false,

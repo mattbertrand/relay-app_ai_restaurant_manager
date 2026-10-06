@@ -12,18 +12,21 @@ export function sourcePathFor(task) {
   return null; // email sources open via navigateToSource (focus state)
 }
 
-export function navigateToSource(navigate, task) {
+// fromTasks: when the manager came from the Follow-ups page, the source
+// detail shows "Back to Follow-ups" instead of its usual list back-link.
+export function navigateToSource(navigate, task, opts = {}) {
   if (!task || !task.source_id) return false;
+  const state = opts.fromTasks ? { backTo: "tasks" } : undefined;
   if (task.source_type === "review") {
-    navigate(`/reviews/${task.source_id}`);
+    navigate(`/reviews/${task.source_id}`, state ? { state } : undefined);
     return true;
   }
   if (task.source_type === "opportunity") {
-    navigate(`/opportunities/${task.source_id}`);
+    navigate(`/opportunities/${task.source_id}`, state ? { state } : undefined);
     return true;
   }
   if (task.source_type === "email") {
-    navigate("/inbox", { state: { focusConversationId: task.source_id } });
+    navigate("/inbox", { state: { focusConversationId: task.source_id, ...(state || {}) } });
     return true;
   }
   return false;

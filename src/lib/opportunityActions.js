@@ -1,5 +1,6 @@
 import { base44 } from "@/api/base44Client";
 import { NEW_STATUSES } from "@/lib/opportunityLifecycle";
+import { syncConversationWorkflow } from "@/lib/workflowStatus";
 
 // Shared opportunity workflow actions, used by the opportunity detail page
 // and the actions page so the underlying data stays consistent everywhere.
@@ -13,6 +14,9 @@ export async function approveResponse(opp) {
     status,
     draft_status: "Approved",
   });
+  if (status === "In Progress") {
+    await syncConversationWorkflow(opp.id, "In Progress", opp.restaurant_id, opp.title);
+  }
 
   // Complete any pending actions tied to this opportunity so pending counts
   // stay accurate across the dashboard and actions pages.
@@ -57,6 +61,7 @@ export async function resolveOpportunity(opp, note) {
     updates.notes = opp.notes ? `${opp.notes}\n${note}` : note;
   }
   await base44.entities.Opportunity.update(opp.id, updates);
+  await syncConversationWorkflow(opp.id, "Resolved", opp.restaurant_id, opp.title);
 
   const pending = await base44.entities.Action.filter({
     opportunity_id: opp.id,
@@ -79,6 +84,7 @@ export async function resolveOpportunity(opp, note) {
 
 export async function reopenOpportunity(opp) {
   await base44.entities.Opportunity.update(opp.id, { status: "In Progress" });
+  await syncConversationWorkflow(opp.id, "In Progress", opp.restaurant_id, opp.title);
   await base44.entities.Activity.create({
     restaurant_id: opp.restaurant_id,
     opportunity_id: opp.id,
@@ -92,6 +98,7 @@ export async function dismissOpportunity(opp, reason) {
     status: "Dismissed",
     dismiss_reason: reason || "",
   });
+  await syncConversationWorkflow(opp.id, "Dismissed", opp.restaurant_id, opp.title);
 
   const pending = await base44.entities.Action.filter({
     opportunity_id: opp.id,

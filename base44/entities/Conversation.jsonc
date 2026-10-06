@@ -19,7 +19,18 @@
     },
     "status": {
       "type": "string",
-      "description": "Inbox lifecycle of the message itself: New, Reply recorded, or Archived. Separate from the underlying opportunity's lifecycle (New \u2192 In Progress \u2192 Resolved)."
+      "description": "Response state of the message itself: New (needs response), Reply recorded, or Archived. Separate from workflow_status (the underlying matter's attention state) \u2014 recording a response never resolves the workflow, and resolving the workflow never erases the response."
+    },
+    "workflow_status": {
+      "type": "string",
+      "enum": [
+        "New",
+        "In Progress",
+        "Resolved",
+        "Archived"
+      ],
+      "default": "New",
+      "description": "The workflow/attention state of the underlying matter, kept in sync with the linked Opportunity (New \u2192 In Progress \u2192 Resolved). Separate from status (response state)."
     },
     "source": {
       "type": "string"
@@ -136,8 +147,7 @@
     },
     "replied_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "When the reply was recorded in Relay."
+      "format": "date-time"
     },
     "is_demo": {
       "type": "boolean",

@@ -6,9 +6,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CheckCircle2, Clock, Pencil, RotateCcw, ChevronRight } from "lucide-react";
+import { CheckCircle2, Clock, Pencil, RotateCcw, ChevronRight, Mail } from "lucide-react";
 import { taskWhenLabel, isOverdue, isSnoozed, navigateToSource, snoozeOptions, zonedToUtcIso } from "@/lib/taskSource";
-import TaskDraftEditor from "@/components/TaskDraftEditor";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_DOT = {
@@ -41,6 +40,7 @@ export default function TaskCard({
   onEdit,
   onSource,
   onUpdate,
+  onDraft,
   focused = false,
 }) {
   const [customOpen, setCustomOpen] = useState(false);
@@ -83,9 +83,15 @@ export default function TaskCard({
           {task.description && task.status !== "Completed" && (
             <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
           )}
-          {task.draft_email !== undefined && task.status !== "Completed" && (
+          {task.status !== "Completed" && (task.task_type === "Email" || task.draft_email) && (
             <div className="mt-2">
-              <TaskDraftEditor task={task} onUpdate={onUpdate} compact />
+              <Button variant="outline" size="sm" onClick={() => onDraft && onDraft(task)}>
+                <Mail className="w-3.5 h-3.5 mr-1.5" />
+                {task.draft_email ? "View draft" : "Write Email"}
+              </Button>
+              {task.draft_email && (
+                <p className="text-xs text-muted-foreground mt-1">Draft saved in Relay — no email has been sent.</p>
+              )}
             </div>
           )}
         </div>

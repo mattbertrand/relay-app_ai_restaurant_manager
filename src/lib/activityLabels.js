@@ -34,6 +34,9 @@ export const ACTIVITY_LABELS = {
   task_completed: "Follow-up task completed",
   task_reopened: "Follow-up task reopened",
   task_snoozed: "Follow-up snoozed",
+  email_draft_created: "Email draft created",
+  email_draft_edited: "Email draft edited",
+  conversation_workflow_updated: "Email workflow updated",
 };
 
 // Internal bookkeeping that never belongs in the manager-facing history.
