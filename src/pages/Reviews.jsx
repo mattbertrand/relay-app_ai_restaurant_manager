@@ -26,6 +26,7 @@ function matchesFilter(review, filter, lifecycle) {
     // Lifecycle filter inside All Reviews: New shows only reviews the manager
     // hasn't seen yet; Resolved ones are gone from New once resolved.
     if (lifecycle === "New") return review.manager_status === "New";
+    if (lifecycle === "In Progress") return review.manager_status === "In Progress";
     if (lifecycle === "Resolved") return review.manager_status === "Resolved";
     return true;
   }
@@ -45,7 +46,7 @@ export default function Reviews() {
   const { toast } = useToast();
   const [sources, setSources] = useState(null);
   const [reviews, setReviews] = useState(null);
-  const [counts, setCounts] = useState({ all: 0, attention: 0, responded: 0, resolved: 0, new: 0 });
+  const [counts, setCounts] = useState({ all: 0, attention: 0, responded: 0, resolved: 0, new: 0, in_progress: 0 });
   // The selected filter survives navigation: leave the list and come back,
   // and the manager lands on the same filter they chose (e.g. Needs Attention).
   const [filter, setFilter] = useState(() => {
@@ -80,7 +81,7 @@ export default function Reviews() {
     const rid = getRestaurantId(user);
     if (!rid) return;
     try {
-      const [srcs, page, cAll, cAttention, cResponded, cResolved, cNew] = await Promise.all([
+      const [srcs, page, cAll, cAttention, cResponded, cResolved, cNew, cInProgress] = await Promise.all([
         base44.entities.ReviewSource.filter({ restaurant_id: rid }, null, 10),
         base44.entities.Review.filter({ restaurant_id: rid }, { sort: "-first_seen_at", limit: 50 }),
         base44.entities.Review.count({ restaurant_id: rid }),
@@ -92,10 +93,11 @@ export default function Reviews() {
         base44.entities.Review.count({ restaurant_id: rid, response_status: "published" }),
         base44.entities.Review.count({ restaurant_id: rid, manager_status: "Resolved" }),
         base44.entities.Review.count({ restaurant_id: rid, manager_status: "New" }),
+        base44.entities.Review.count({ restaurant_id: rid, manager_status: "In Progress" }),
       ]);
       setSources(srcs || []);
       setReviews((page && page.items) || []);
-      setCounts({ all: cAll, attention: cAttention, responded: cResponded, resolved: cResolved, new: cNew });
+      setCounts({ all: cAll, attention: cAttention, responded: cResponded, resolved: cResolved, new: cNew, in_progress: cInProgress });
     } catch (err) {
       console.error(err);
     }
@@ -214,6 +216,7 @@ export default function Reviews() {
           {[
             { id: "all", label: "All statuses" },
             { id: "New", label: "New" },
+            { id: "In Progress", label: "In Progress" },
             { id: "Resolved", label: "Resolved" },
           ].map((s) => (
             <button
@@ -229,6 +232,7 @@ export default function Reviews() {
             >
               {s.label}
               {s.id === "New" && counts.new ? ` (${counts.new})` : ""}
+              {s.id === "In Progress" && counts.in_progress ? ` (${counts.in_progress})` : ""}
               {s.id === "Resolved" && counts.resolved ? ` (${counts.resolved})` : ""}
             </button>
           ))}
