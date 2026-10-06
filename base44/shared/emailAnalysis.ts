@@ -2,7 +2,7 @@
 // Keeps Relay's classification rules in one place.
 
 import { detectDateIssue } from "./dateChecks.ts";
-import { ensureSingleSignature } from "./signature.ts";
+import { finalizeDraft } from "./signature.ts";
 import { normalizeDraftParagraphs } from "./draftFormatting.ts";
 
 const ANALYSIS_SCHEMA = {
@@ -355,12 +355,15 @@ Return JSON only.`;
   if (dateCheck.issue !== "none" && result && result.date_issue !== dateCheck.issue) {
     result.date_issue = dateCheck.issue;
   }
-  // Signature safety: every generated draft carries exactly one signature
-  // block — never a second copy appended to a draft that already had one.
+  // Draft assembly: exactly one signature block, and when the manager keeps a
+  // rich (HTML) signature, the finished draft is stored as HTML — body
+  // paragraphs + the signature HTML — never flattened back to plain text.
   if (result && result.draft_response) {
-    result.draft_response = ensureSingleSignature(
-      normalizeDraftParagraphs(result.draft_response, options.signature, restaurantName),
-      options.signature
+    result.draft_response = finalizeDraft(
+      result.draft_response,
+      options.signature,
+      options.signatureHtml,
+      restaurantName
     );
   }
   return result;

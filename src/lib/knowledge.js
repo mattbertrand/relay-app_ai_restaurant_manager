@@ -48,6 +48,9 @@ export function emptyKnowledge() {
     contact_email: "",
     hours: emptyHours(),
     temporary_hours: [],
+    // Recurring special hours as recurrence rules with per-date exceptions —
+    // occurrences are computed when needed, never materialized as records.
+    recurring_special_hours: [],
     reservations: {
       accepted: false,
       method: "",
@@ -122,6 +125,10 @@ export function emptyKnowledge() {
     // Draft signatures: a full one for email drafts, a separate shorter
     // public one for review responses.
     email_signature: "",
+    // Rich signature: sanitized HTML (primary, used in email drafts) plus a
+    // plain-text fallback kept in sync with email_signature.
+    signature_html: "",
+    signature_text: "",
     review_signature: "",
     // Restaurant-specific response templates — manager-defined guidance for
     // common inquiries. Relay recommends; it never sends or forwards.
@@ -189,6 +196,7 @@ export function knowledgeWithDefaults(record) {
     ...record,
     hours: { ...base.hours, ...(record.hours || {}) },
     temporary_hours: record.temporary_hours || [],
+    recurring_special_hours: record.recurring_special_hours || [],
     reservations: { ...base.reservations, ...(record.reservations || {}) },
     private_events: { ...base.private_events, ...(record.private_events || {}) },
     catering: { ...base.catering, ...(record.catering || {}) },

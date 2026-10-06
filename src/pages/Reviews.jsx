@@ -11,11 +11,21 @@ import BackToToday from "@/components/BackToToday";
 import { PROVIDER_META, UPCOMING_PROVIDERS, sourceMetaFor } from "@/lib/reviewProviders";
 import { cn } from "@/lib/utils";
 
+// Attention filters: what kind of response this review got (a recorded
+// response is NOT the same as the underlying issue being resolved).
 const FILTERS = [
-  { id: "all", label: "All Reviews" },
+  { id: "all", label: "All" },
   { id: "attention", label: "Needs Attention" },
-  { id: "responded", label: "Responded" },
+  { id: "responded", label: "Response Recorded" },
   { id: "resolved", label: "Resolved" },
+];
+
+// Workflow filters: the attention lifecycle (New → In Progress → Resolved).
+const STATUS_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "New", label: "New" },
+  { id: "In Progress", label: "In Progress" },
+  { id: "Resolved", label: "Resolved" },
 ];
 
 // The Reviews list state (the selected filter) survives navigation.
@@ -193,51 +203,54 @@ export default function Reviews() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
-              filter === f.id
-                ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-border bg-card text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {f.label} ({counts[f.id]})
-          </button>
-        ))}
-      </div>
-
-      {filter === "all" && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {[
-            { id: "all", label: "All statuses" },
-            { id: "New", label: "New" },
-            { id: "In Progress", label: "In Progress" },
-            { id: "Resolved", label: "Resolved" },
-          ].map((s) => (
+      {/* Sticky, stable filter container: both rows always occupy the same
+          space, so changing a filter only replaces the results below — the
+          page never jumps or resizes. */}
+      <div className="sticky top-0 z-20 -mx-1 px-1 py-2 mb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
             <button
-              key={s.id}
+              key={f.id}
               type="button"
-              onClick={() => setLifecycle(s.id)}
+              onClick={() => setFilter(f.id)}
               className={cn(
                 "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
-                lifecycle === s.id
+                filter === f.id
                   ? "border-primary/30 bg-primary/10 text-primary"
                   : "border-border bg-card text-muted-foreground hover:text-foreground"
               )}
             >
-              {s.label}
-              {s.id === "New" && counts.new ? ` (${counts.new})` : ""}
-              {s.id === "In Progress" && counts.in_progress ? ` (${counts.in_progress})` : ""}
-              {s.id === "Resolved" && counts.resolved ? ` (${counts.resolved})` : ""}
+              {f.label} ({counts[f.id]})
             </button>
           ))}
         </div>
-      )}
+        <div className="flex flex-wrap gap-2">
+          {STATUS_FILTERS.map((s) => {
+            const inactive = filter !== "all";
+            return (
+              <button
+                key={s.id}
+                type="button"
+                disabled={inactive}
+                title={inactive ? "Status filters apply within All" : undefined}
+                onClick={() => setLifecycle(s.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                  inactive && "opacity-40 cursor-not-allowed",
+                  !inactive && lifecycle === s.id
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {s.label}
+                {!inactive && s.id === "New" && counts.new ? ` (${counts.new})` : ""}
+                {!inactive && s.id === "In Progress" && counts.in_progress ? ` (${counts.in_progress})` : ""}
+                {!inactive && s.id === "Resolved" && counts.resolved ? ` (${counts.resolved})` : ""}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {filtered.length === 0 ? (
         filter === "all" ? (
@@ -257,6 +270,8 @@ export default function Reviews() {
               ? "No published responses yet."
               : lifecycle === "New"
               ? "No new reviews right now."
+              : lifecycle === "In Progress"
+              ? "No in-progress reviews right now."
               : "No resolved reviews yet."}
           </p>
         )

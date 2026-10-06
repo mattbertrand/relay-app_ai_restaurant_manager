@@ -155,6 +155,7 @@ export async function reanalyzeOne(base44, { restaurantId, restaurantName, resta
     calendarContext: await calendarAnalysisContext(base44, knowledge, convo.subject, body),
     timezone: knowledge ? knowledge.timezone : null,
     signature: knowledge && knowledge.email_signature ? knowledge.email_signature : null,
+    signatureHtml: knowledge && knowledge.signature_html ? knowledge.signature_html : null,
   });
 
   const classification = analysis.classification || "routine";

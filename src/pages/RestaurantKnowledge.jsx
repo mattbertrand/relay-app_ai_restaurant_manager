@@ -49,7 +49,7 @@ const GROUPS = [
     sections: [
       { id: "basics", icon: MapPin, title: "Basic restaurant information", description: "Address and contact details Relay can use to answer customer questions." },
       { id: "hours", icon: Clock, title: "Operating hours", description: "Regular weekly hours plus temporary and special hours." },
-      { id: "signatures", icon: PenLine, title: "Draft signatures", description: "Your default signature for email drafts and a separate, shorter one for public review responses — editable on each draft before approval." },
+      { id: "signatures", icon: PenLine, title: "Draft signatures", description: "A rich email signature you can paste straight from Gmail or Outlook — formatting and images kept — and a separate, shorter one for public review responses. Each draft stays editable before approval." },
     ],
   },
   {
@@ -108,6 +108,7 @@ export default function RestaurantKnowledge() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedTick, setSavedTick] = useState(0);
   const [baseline, setBaseline] = useState(null);
   const [group, setGroup] = useState("restaurant");
 
@@ -144,6 +145,7 @@ export default function RestaurantKnowledge() {
         setRecordId(created.id);
       }
       setBaseline(JSON.stringify(payload));
+      setSavedTick((t) => t + 1);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       return true;
@@ -222,7 +224,7 @@ export default function RestaurantKnowledge() {
       case "hours":
         return (
           <KnowledgeSection {...common}>
-            <HoursEditor value={knowledge} onChange={setKnowledge} />
+            <HoursEditor value={knowledge} onChange={setKnowledge} savedSignal={savedTick} />
           </KnowledgeSection>
         );
       case "signatures":

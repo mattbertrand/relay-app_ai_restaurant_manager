@@ -33,7 +33,15 @@
     },
     "email_signature": {
       "type": "string",
-      "description": "The manager's default email signature, appended to email reply drafts (name, title, restaurant, contact details). Editable on each individual draft before approval."
+      "description": "Plain-text version of the manager's default email signature (kept in sync with signature_text)."
+    },
+    "signature_html": {
+      "type": "string",
+      "description": "The manager's rich email signature as sanitized HTML \u2014 the primary version for rendering email drafts and future HTML email sending. Never flattened back to plain text."
+    },
+    "signature_text": {
+      "type": "string",
+      "description": "Plain-text fallback of the manager's rich email signature, for plain-text consumers and signature deduplication."
     },
     "review_signature": {
       "type": "string",
@@ -64,7 +72,63 @@
           }
         }
       },
-      "description": "Holiday closures, holiday hours, temporary closures, and special event hours with optional start/end dates."
+      "description": "One-time holiday closures, holiday hours, temporary closures, and special event hours with optional start/end dates. On a date covered by a one-time entry, the one-time entry takes precedence over any recurring special hours rule."
+    },
+    "recurring_special_hours": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "weekly"
+            ],
+            "description": "Recurrence frequency. Weekly only for now."
+          },
+          "day_of_week": {
+            "type": "string",
+            "description": "The weekday the rule applies to, e.g. 'Monday'."
+          },
+          "start_time": {
+            "type": "string"
+          },
+          "end_time": {
+            "type": "string"
+          },
+          "effective_start_date": {
+            "type": "string",
+            "description": "The date the rule becomes active (YYYY-MM-DD), in the restaurant's local timezone."
+          },
+          "end_date": {
+            "type": "string",
+            "description": "Optional date after which the rule no longer applies (YYYY-MM-DD)."
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "description": "The skipped occurrence's date (YYYY-MM-DD)."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "Why this occurrence is skipped, e.g. 'Private event'."
+                }
+              }
+            },
+            "description": "Individual occurrence dates the rule is skipped on. Skipping one occurrence never disables the rule \u2014 it continues on subsequent weeks."
+          }
+        }
+      },
+      "description": "Recurring special hours stored as recurrence rules (e.g. Trivia every Monday 6\u201310 PM) with per-date exceptions. Occurrences are computed when needed \u2014 never materialized as individual records. A one-time special hours entry on the same date takes precedence over the rule."
     },
     "reservations": {
       "type": "object",

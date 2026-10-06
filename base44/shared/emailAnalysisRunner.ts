@@ -132,6 +132,7 @@ export async function analyzeQueuedConversation(client, { restaurantId, conversa
       calendarContext: await calendarAnalysisContext(client, knowledgeRecord, convo.subject, body),
       timezone: knowledgeRecord ? knowledgeRecord.timezone : null,
       signature: knowledgeRecord && knowledgeRecord.email_signature ? knowledgeRecord.email_signature : null,
+      signatureHtml: knowledgeRecord && knowledgeRecord.signature_html ? knowledgeRecord.signature_html : null,
     });
   } catch (e) {
     // Analysis failed — isolated to this message. Mark it retryable and move

@@ -1,3 +1,5 @@
+import { formatRecurringSpecialHoursForPrompt } from "./specialHours.ts";
+
 // Loads and formats a restaurant's verified knowledge and the manager's past
 // corrections for use during email analysis. Everything here is scoped to a
 // single restaurant: one restaurant's knowledge and corrections never
@@ -103,9 +105,12 @@ export function formatKnowledgeForPrompt(knowledge) {
     .filter(Boolean);
   if (temp.length) {
     sections.push(
-      `TEMPORARY / SPECIAL HOURS (only use an item if today falls within its dates, or if it has no dates)\n${temp.join("\n")}`
+      `TEMPORARY / SPECIAL HOURS (only use an item if today falls within its dates, or if it has no dates; a one-time entry on a date takes precedence over any recurring special hours rule for that date)\n${temp.join("\n")}`
     );
   }
+
+  const recurringSpecial = formatRecurringSpecialHoursForPrompt(knowledge);
+  if (recurringSpecial) sections.push(recurringSpecial);
 
   const r = knowledge.reservations || {};
   const resLines = [
