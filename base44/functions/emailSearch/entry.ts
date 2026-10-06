@@ -3,6 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 // Natural-language email search over the emails Relay has IMPORTED (New,
 // Reply recorded, and Archived alike — Gmail itself is never queried here, so
 // messages that were never imported can't be found and nothing is invented).
+// v2: a named sender also matches the name signed in the message body.
 //
 // Cost-conscious by design: ONE structured read of the manager's words turns
 // the request into search criteria (senders, keywords, phrases, dates,
@@ -145,9 +146,11 @@ Leave arrays empty and dates "" when not implied. Return JSON only.`,
       const opp = c.opportunity_id ? oppById[c.opportunity_id] : null;
       const oppTitle = lc(opp && opp.title);
 
+      // Phrase variants ("dine & donate" / "dine and donate") are
+      // alternatives — any one appearing is a match.
       if (phrases.length) {
         const haystack = `${subject} ${body} ${intent} ${category} ${oppTitle}`;
-        if (!phrases.every((p) => haystack.includes(p))) continue;
+        if (!phrases.some((p) => haystack.includes(p))) continue;
       }
       // A sender the manager named matches either the From line or the name
       // signed in the message body — greetings and signatures often carry the
