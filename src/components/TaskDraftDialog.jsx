@@ -20,6 +20,7 @@ import { taskActivity } from "@/lib/taskSource";
 export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
   const { toast } = useToast();
   const [recipient, setRecipient] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [seeded, setSeeded] = useState(null);
@@ -29,6 +30,7 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
   if (open && task && seeded !== task.id) {
     setSeeded(task.id);
     setRecipient(task.draft_recipient || "");
+    setRecipientEmail(task.draft_recipient_email || "");
     setSubject(task.draft_subject || "");
     setBody(task.draft_email || "");
   }
@@ -44,6 +46,7 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
     try {
       const patch = {
         draft_recipient: recipient.trim(),
+        draft_recipient_email: recipientEmail.trim(),
         draft_subject: subject.trim(),
         draft_email: body,
         draft_edited: true,
@@ -78,6 +81,7 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
         setSubject(updated.draft_subject || "");
         setBody(updated.draft_email || "");
         setRecipient(updated.draft_recipient || recipient);
+        setRecipientEmail(updated.draft_recipient_email || recipientEmail);
         if (onSaved) onSaved(updated);
       }
       toast({ title: "Draft regenerated", description: "The manager's instruction and context are preserved — edit freely." });
@@ -98,12 +102,27 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">To</Label>
+            <Label className="text-xs text-muted-foreground">To (name or role)</Label>
             <Input
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
               placeholder="Who should receive it — e.g. Banquet Manager"
             />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Recipient email address</Label>
+            <Input
+              type="email"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              placeholder="e.g. keith@yourrestaurant.com"
+            />
+            {recipient.trim() && !recipientEmail.trim() && (
+              <p className="text-xs text-amber-700">
+                Email address required — Relay doesn't have one for {recipient.trim()} and won't invent it. Enter the
+                real address before this draft could ever be sent.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Subject</Label>

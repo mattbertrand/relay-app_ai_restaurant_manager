@@ -498,6 +498,18 @@ export default function OpportunityDetail() {
         </div>
       )}
 
+      {/* Every follow-up tied to this opportunity — several separate actions
+          can share one source, each with its own type, date, and status. */}
+      <div className="mb-6">
+        <FollowUpsOnSource
+          sourceType="opportunity"
+          sourceId={opp.id}
+          sourceLabel={opp.title || "Opportunity"}
+          sourceSummary={String(opp.description || "").slice(0, 300)}
+          isDemo={opp.is_demo}
+        />
+      </div>
+
       {/* Activity history — this opportunity only, newest first, real
           timestamps, technical bookkeeping hidden */}
       <div className="mb-6">

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import {
-  X, Loader2, CheckCircle2, Clock, CalendarClock, ArrowLeft, Mail,
+  X, Loader2, CheckCircle2, Clock, CalendarClock, ArrowLeft, Mail, Plus,
 } from "lucide-react";
 import { taskWhenLabel } from "@/lib/taskSource";
 import TaskDraftDialog from "@/components/TaskDraftDialog";
@@ -76,6 +76,10 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
   const [customTime, setCustomTime] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  // A plan: when one instruction contains several distinct actions, Relay
+  // shows them all and the manager confirms before anything is created.
+  const [plan, setPlan] = useState(null);
+  const [planInstruction, setPlanInstruction] = useState("");
   const [clarify, setClarify] = useState(null);
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftTask, setDraftTask] = useState(null);
@@ -91,6 +95,8 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
     setCustomDate("");
     setCustomTime("");
     setResult(null);
+    setPlan(null);
+    setPlanInstruction("");
     setClarify(null);
     setDraftOpen(false);
     setDraftTask(null);
@@ -119,6 +125,14 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
       const d = res.data || {};
       if (d.no_task) {
         onOpenChange(false);
+        return;
+      }
+      if (d.plan) {
+        // Several distinct follow-ups in one instruction — confirm first.
+        setPlan(d.tasks || []);
+        setPlanInstruction(payload.instruction || "");
+        setStep("plan");
+        setInstruction("");
         return;
       }
       if (d.needs_clarification) {
@@ -159,6 +173,41 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
     const q = quickInput.trim();
     if (!q) return;
     create({ instruction: q });
+  };
+
+  // Create every follow-up in the confirmed plan — one call, all linked to
+  // the same source item, each Email action getting its own draft.
+  const createPlan = async () => {
+    if (!plan || !plan.length || busy) return;
+    setBusy(true);
+    try {
+      const res = await base44.functions.invoke("createFollowUp", {
+        source_type: source.type,
+        source_id: source.id,
+        source_label: source.label,
+        source_summary: source.summary,
+        source_is_demo: !!source.isDemo,
+        instruction: planInstruction,
+        plan_tasks: plan,
+      });
+      setResult(res.data || {});
+      setPlan(null);
+      setPlanInstruction("");
+      setStep("confirm");
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Couldn't create the follow-ups", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // "Add another follow-up" — same source context, straight back to choosing
+  // the next action without starting over.
+  const addAnother = () => {
+    setResult(null);
+    setStep("choose");
+    setTimeout(() => inputRef.current && inputRef.current.focus(), 50);
   };
 
   const answerClarify = async (dueDate, dueTime) => {
@@ -376,7 +425,48 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
           </div>
         )}
 
-        {step === "confirm" && result && result.task && (
+        {step === "plan" && plan && plan.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground">
+              I found {plan.length} follow-ups in that request:
+            </p>
+            <ul className="rounded-lg border border-border divide-y divide-border">
+              {plan.map((t, i) => (
+                <li key={i} className="px-3 py-2.5">
+                  <p className="text-sm font-medium text-foreground">
+                    <span className="text-muted-foreground mr-1.5">{i + 1}.</span>
+                    {t.title}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t.task_type}
+                    {t.draft_recipient ? ` · ${t.draft_recipient}` : ""}
+                    {t.due_date ? ` · due ${t.due_date}${t.due_time ? ` ${t.due_time}` : ""}` : t.reminder_note ? ` · ${t.reminder_note}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              Each becomes its own follow-up on this {source.type} — separate types, dates, and status.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setPlan(null); setStep("choose"); }} disabled={busy}>
+                Edit
+              </Button>
+              <Button size="sm" onClick={createPlan} disabled={busy || !plan.length}>
+                {busy ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  `Create ${plan.length} follow-ups`
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === "confirm" && result && (result.task || (result.tasks && result.tasks.length > 1)) && (
           <div className="space-y-3">
             <div className="flex items-start gap-2 text-sm">
               {result.updated_existing ? (
@@ -387,24 +477,49 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5" />
-                  <p className="text-muted-foreground">Follow-up created.</p>
+                  <p className="text-muted-foreground">
+                    {result.tasks && result.tasks.length > 1
+                      ? `${result.tasks.length} follow-ups created.`
+                      : "Follow-up created."}
+                  </p>
                 </>
               )}
             </div>
-            <div className="rounded-lg border border-border bg-secondary/40 p-3">
-              <p className="text-sm font-medium text-foreground">{result.task.title}</p>
-              <p className={cn("text-xs mt-1", result.task.due_date && result.task.due_date < today ? "text-red-600" : "text-muted-foreground")}>
-                {taskWhenLabel(result.task, today)}
-                {result.task.source_label ? ` · ${result.task.source_label}` : ""}
-              </p>
-              {result.task.draft_email && (
-                <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5" /> A draft email is attached — saved in Relay only, nothing sent.
-                </p>
+            {result.tasks && result.tasks.length > 1 ? (
+              <div className="rounded-lg border border-border divide-y divide-border">
+                {result.tasks.map((t) => (
+                  <div key={t.id} className="px-3 py-2.5 bg-secondary/40">
+                    <p className="text-sm font-medium text-foreground">{t.title}</p>
+                    <p className={cn("text-xs mt-0.5", t.due_date && t.due_date < today ? "text-red-600" : "text-muted-foreground")}>
+                      {taskWhenLabel(t, today)}
+                      {t.source_label ? ` · ${t.source_label}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              result.task && (
+                <div className="rounded-lg border border-border bg-secondary/40 p-3">
+                  <p className="text-sm font-medium text-foreground">{result.task.title}</p>
+                  <p className={cn("text-xs mt-1", result.task.due_date && result.task.due_date < today ? "text-red-600" : "text-muted-foreground")}>
+                    {taskWhenLabel(result.task, today)}
+                    {result.task.source_label ? ` · ${result.task.source_label}` : ""}
+                  </p>
+                  {result.task.draft_email && (
+                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5" /> A draft email is attached — saved in Relay only, nothing sent.
+                    </p>
+                  )}
+                </div>
+              )
+            )}
+            <div className="flex justify-end gap-2 flex-wrap">
+              {!result.updated_existing && (
+                <Button variant="outline" size="sm" onClick={addAnother} disabled={busy}>
+                  <Plus className="w-3.5 h-3.5 mr-1.5" /> Add another follow-up
+                </Button>
               )}
-            </div>
-            <div className="flex justify-end gap-2">
-              {result.task.draft_email && (
+              {result.task && result.task.draft_email && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -417,7 +532,7 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
                 </Button>
               )}
               <Button size="sm" onClick={viewFollowUp}>
-                View Follow-up
+                {result.tasks && result.tasks.length > 1 ? "View Follow-ups" : "View Follow-up"}
               </Button>
             </div>
           </div>

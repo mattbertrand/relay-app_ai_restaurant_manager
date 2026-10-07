@@ -65,6 +65,7 @@ export default function Inbox() {
   // Email search — over the emails Relay has imported, including archived.
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
+  const [searchRelaxed, setSearchRelaxed] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const syncedRef = useRef(false);
@@ -420,6 +421,7 @@ export default function Inbox() {
       try {
         const res = await base44.functions.invoke("emailSearch", { query: q });
         setSearchResults(res.data.results || []);
+        setSearchRelaxed(!!res.data.relaxed);
       } catch (err) {
         setSearchError("Search failed. Please try again.");
         setSearchResults(null);
@@ -458,6 +460,7 @@ export default function Inbox() {
     setSearchResults(null);
     setSearchQuery("");
     setSearchError(null);
+    setSearchRelaxed(false);
   };
 
   const filtered = (conversations || []).filter((c) => {
@@ -723,7 +726,7 @@ export default function Inbox() {
             <p className="text-sm text-muted-foreground">
               {searchResults.length === 0
                 ? "No matching emails found."
-                : `${searchResults.length} matching message${searchResults.length === 1 ? "" : "s"}`}
+                : `${searchResults.length} matching message${searchResults.length === 1 ? "" : "s"}${searchRelaxed ? " — closest matches, since nothing matched every word exactly" : ""}`}
             </p>
             <Button variant="ghost" size="sm" onClick={clearSearch}>
               <X className="w-3.5 h-3.5 mr-1.5" /> Clear search
@@ -761,6 +764,11 @@ export default function Inbox() {
                           >
                             Related opportunity: {r.opportunity_title || "view"} →
                           </Link>
+                        )}
+                        {r.matched && r.matched.length > 0 && (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            Matched: {r.matched.slice(0, 3).join(" · ")}
+                          </p>
                         )}
                       </div>
                     </div>

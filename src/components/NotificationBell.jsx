@@ -2,14 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { Button } from "@/components/ui/button";
-import { Bell, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Bell, ChevronRight, Clock } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-// In-app notifications for follow-up tasks (reminders and overdue notices).
-// Clicking one marks it read and opens the task. Extensible: email and push
-// delivery can hang off the same notification records later.
+// A compact notification panel anchored to the bell: it opens over the page
+// (never pushing or resizing the app), scrolls internally, closes on Escape
+// or an outside click, and prioritizes what actually needs the manager:
+// overdue follow-ups first, then due-today reminders. When several overdue
+// notices pile up they collapse into one calm group row instead of an
+// emergency dashboard.
 export default function NotificationBell({ className }) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -44,14 +46,38 @@ export default function NotificationBell({ className }) {
     return () => unsub();
   }, [load]);
 
+  // Escape closes the panel; the fixed overlay handles outside clicks.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const openTask = async (taskId) => {
+    setOpen(false);
+    navigate("/tasks", { state: { focusTaskId: taskId } });
+  };
+
   const openNotification = async (n) => {
     try {
       await base44.entities.Notification.update(n.id, { read_at: new Date().toISOString() });
     } catch (e) { /* best-effort */ }
     setItems((cur) => cur.filter((x) => x.id !== n.id));
-    setOpen(false);
-    if (n.task_id) navigate("/tasks", { state: { focusTaskId: n.task_id } });
-    else navigate("/tasks");
+    openTask(n.task_id);
+  };
+
+  const openOverdueGroup = async () => {
+    try {
+      const ids = overdue.map((n) => n.id);
+      if (ids.length) {
+        await base44.entities.Notification.bulkUpdate(ids.map((id) => ({ id, read_at: new Date().toISOString() })));
+      }
+    } catch (e) { /* best-effort */ }
+    setItems((cur) => cur.filter((x) => x.type !== "task_overdue"));
+    openTask(null);
   };
 
   const markAllRead = async () => {
@@ -67,11 +93,16 @@ export default function NotificationBell({ className }) {
     }
   };
 
+  // Priority order: overdue first, then reminders — newest first within each.
+  const overdue = items.filter((n) => n.type === "task_overdue");
+  const reminders = items.filter((n) => n.type !== "task_overdue");
+  const hasOverdueGroup = overdue.length > 3;
+
   return (
     <div className={cn("relative", className)}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="absolute w-8 h-8 rounded-full bg-muted hover:bg-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+        className="relative w-8 h-8 rounded-full bg-muted hover:bg-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Notifications"
       >
         <Bell className="w-4 h-4" />
@@ -85,8 +116,8 @@ export default function NotificationBell({ className }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="relative right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-card rounded-xl border border-border shadow-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-card rounded-xl border border-border shadow-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
               <span className="text-sm font-semibold text-foreground">Notifications</span>
               {items.length > 0 && (
                 <button onClick={markAllRead} className="text-xs text-muted-foreground hover:text-foreground">
@@ -95,36 +126,57 @@ export default function NotificationBell({ className }) {
               )}
             </div>
             {!loaded ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground text-center">Loading…</p>
+              <p className="px-4 py-5 text-sm text-muted-foreground text-center">Loading…</p>
             ) : items.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground text-center">No notifications right now.</p>
+              <p className="px-4 py-5 text-sm text-muted-foreground text-center">You're all caught up.</p>
             ) : (
-              <div className="max-h-80 overflow-y-auto divide-y divide-border">
-                {items.map((n) => (
+              <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                {hasOverdueGroup && (
                   <button
-                    key={n.id}
-                    onClick={() => openNotification(n)}
-                    className="w-full flex items-start gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+                    onClick={openOverdueGroup}
+                    className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors text-left"
                   >
-                    {n.type === "task_overdue" ? (
-                      <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                    ) : n.type === "task_reminder" ? (
-                      <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                    ) : (
-                      <CheckCircle2 className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                    )}
+                    <span className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <AlertTriangle className="w-3 h-3 text-red-600" />
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground">{n.title}</p>
-                      <p className="text-sm text-muted-foreground truncate">{n.body}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(n.created_date)}</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {overdue.length} overdue follow-ups
+                      </p>
+                      <p className="text-xs text-muted-foreground">Review them in Follow-ups</p>
                     </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
                   </button>
-                ))}
+                )}
+                {!hasOverdueGroup &&
+                  overdue.map((n) => <NotificationRow key={n.id} n={n} onOpen={openNotification} />)}
+                {reminders.map((n) => <NotificationRow key={n.id} n={n} onOpen={openNotification} />)}
               </div>
             )}
           </div>
         </>
       )}
     </div>
+  );
+}
+
+function NotificationRow({ n, onOpen }) {
+  const isOverdue = n.type === "task_overdue";
+  return (
+    <button
+      onClick={() => onOpen(n)}
+      className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors text-left"
+    >
+      {isOverdue ? (
+        <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+      ) : (
+        <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{n.title}</p>
+        <p className="text-sm text-muted-foreground truncate">{n.body}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(n.created_date)}</p>
+      </div>
+    </button>
   );
 }

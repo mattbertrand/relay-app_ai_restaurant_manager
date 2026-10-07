@@ -500,6 +500,18 @@ export default function ReviewDetail() {
         </p>
       )}
 
+      {/* Every follow-up tied to this review — several separate actions can
+          share one source, each with its own type, date, and status. */}
+      <div className="mb-6">
+        <FollowUpsOnSource
+          sourceType="review"
+          sourceId={review.id}
+          sourceLabel={`Review — ${review.reviewer_name || "customer"}`}
+          sourceSummary={String(review.review_text || "").slice(0, 300)}
+          isDemo={review.is_demo}
+        />
+      </div>
+
       {/* Activity history — this review only */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">

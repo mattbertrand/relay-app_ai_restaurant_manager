@@ -142,7 +142,7 @@ export default function RecurringSpecialHours({ value, onChange }) {
                       ))}
                     </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Starts</Label>
                       <TimePicker value={r.start_time || ""} onChange={(v) => setRule(idx, { start_time: v })} />

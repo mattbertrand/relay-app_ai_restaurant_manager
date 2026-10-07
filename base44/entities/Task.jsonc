@@ -1,7 +1,7 @@
 {
   "name": "Task",
   "type": "object",
-  "description": "A follow-up task the manager explicitly committed to \u2014 tightly linked to the Relay item (review, email, opportunity, event) that created it. Tasks have their own lifecycle, independent of the source item's status: completing the source action never auto-completes the task.",
+  "description": "A follow-up task the manager explicitly committed to \u2014 tightly linked to the Relay item (review, email, opportunity, event) that created it. Tasks have their own lifecycle, independent of the source item's status: completing the source action never auto-completes the task, and a source can have multiple independent follow-ups.",
   "properties": {
     "restaurant_id": {
       "type": "string"
@@ -11,7 +11,7 @@
     },
     "description": {
       "type": "string",
-      "description": "Optional notes the manager added."
+      "description": "The manager's original instruction (and any notes they added later) \u2014 the source of truth for what this task should do."
     },
     "task_type": {
       "type": "string",
@@ -60,7 +60,7 @@
     },
     "source_id": {
       "type": "string",
-      "description": "The id of the originating review, conversation, or opportunity. Clicking the source opens the item directly."
+      "description": "The id of the originating review, conversation, or opportunity. Clicking the source opens the item directly. Several follow-ups can share one source."
     },
     "source_label": {
       "type": "string",
@@ -109,6 +109,10 @@
     "draft_recipient": {
       "type": "string",
       "description": "Who the task's draft email is addressed to \u2014 a person, role, or team (e.g. 'Banquet Manager', 'Josh')."
+    },
+    "draft_recipient_email": {
+      "type": "string",
+      "description": "The recipient's actual email address, when one is known \u2014 resolved from the Restaurant Profile or entered by the manager. Never invented: a draft whose recipient has no known address is shown as needing one before it could ever be sent."
     },
     "draft_edited": {
       "type": "boolean",
