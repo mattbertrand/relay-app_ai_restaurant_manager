@@ -77,15 +77,21 @@ export default function Inbox() {
 
   const loadAnalysisCounts = useCallback(async () => {
     try {
-      const live = { source: "Gmail", is_demo: false };
-      const [total, pending, processing, analyzed, failed] = await Promise.all([
-        base44.entities.Conversation.count(live),
-        base44.entities.Conversation.count({ ...live, analysis_state: "pending" }),
-        base44.entities.Conversation.count({ ...live, analysis_state: "processing" }),
-        base44.entities.Conversation.count({ ...live, analysis_state: "analyzed" }),
-        base44.entities.Conversation.count({ ...live, analysis_state: "failed" }),
-      ]);
-      setAnalysisCounts({ total, pending, processing, analyzed, failed });
+      // ONE grouped query instead of five separate count requests — analysis
+      // progress must never flood the backend while a batch is running.
+      const agg = await base44.entities.Conversation.aggregate({
+        query: { source: "Gmail", is_demo: false },
+        groupBy: "analysis_state",
+      });
+      const counts = { total: 0, pending: 0, processing: 0, analyzed: 0, failed: 0 };
+      for (const row of agg.rows || []) {
+        const key = row.analysis_state;
+        if (key && key in counts) {
+          counts[key] = row.count;
+          counts.total += row.count;
+        }
+      }
+      setAnalysisCounts(counts);
     } catch (err) {
       /* analysis counts are informational */
     }
@@ -169,9 +175,31 @@ export default function Inbox() {
     }
   }, [loadData, runSync]);
 
-  // While messages are queued or being analyzed, keep progress live — the
-  // analysis runs in the background (one message per workflow run), so the
-  // Inbox just reflects it.
+  // Live progress without hammering the backend: the entity subscription
+  // PUSHES every change (analysis claims, completions) — refreshes are
+  // debounced and only happen when something actually changed, so there is no
+  // fixed polling loop competing with the analysis itself.
+  useEffect(() => {
+    let timer = null;
+    const refresh = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        base44.entities.Conversation.list("-created_date", 100)
+          .then((convos) => setConversations(convos))
+          .catch(() => {});
+        loadAnalysisCounts();
+      }, 1500);
+    };
+    const unsub = base44.entities.Conversation.subscribe(refresh);
+    return () => {
+      unsub();
+      if (timer) clearTimeout(timer);
+    };
+  }, [loadAnalysisCounts]);
+
+  // Slow fallback while messages are queued or being analyzed, in case a live
+  // event is ever missed — one list page + one grouped query, twice a minute.
   useEffect(() => {
     if (!analysisCounts) return;
     if (analysisCounts.pending + analysisCounts.processing === 0) return;
@@ -180,7 +208,7 @@ export default function Inbox() {
         .then((convos) => setConversations(convos))
         .catch(() => {});
       loadAnalysisCounts();
-    }, 5000);
+    }, 30000);
     return () => clearInterval(timer);
   }, [analysisCounts, loadAnalysisCounts]);
 

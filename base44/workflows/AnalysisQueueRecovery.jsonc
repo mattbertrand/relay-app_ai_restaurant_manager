@@ -1,0 +1,47 @@
+{
+  "description": "Every 5 minutes, requeues Gmail messages whose analysis died mid-way or failed (with exponential backoff) and analyzes the oldest queued messages \u2014 so email analysis completes on its own, without the manager re-kicking anything.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "*/5 * * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Analysis Queue Recovery",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "analysis_queue_recovery",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "recover_queue": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "analyzeEmails",
+            "args": {
+              "recovery": true
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Recover analysis queue",
+            "description": "Requeues stuck or failed messages, drains the oldest queued ones"
+          }
+        }
+      }
+    ]
+  }
+}

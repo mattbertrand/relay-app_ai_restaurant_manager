@@ -77,7 +77,7 @@ export default function AppLayout() {
   }, []);
   const scheduleNavCounts = useCallback(() => {
     if (navCountsTimer.current) clearTimeout(navCountsTimer.current);
-    navCountsTimer.current = setTimeout(loadNavCounts, 400);
+    navCountsTimer.current = setTimeout(loadNavCounts, 1200);
   }, [loadNavCounts]);
   useEffect(() => { loadNavCounts(); }, [loadNavCounts, location.pathname]);
   useEffect(() => {
