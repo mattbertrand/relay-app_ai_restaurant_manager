@@ -26,50 +26,47 @@ export default function HoursEditor({ value, onChange, savedSignal = 0 }) {
 
   // Chronological display order for the one-time entries (soonest upcoming
   // first; past entries badged and grouped after upcoming ones). Stored order
-  // is untouched — this is display ordering only.
+  // is untouched — this is display ordering only. Returns temp INDICES so the
+  // rendered rows always read the current entry content.
   const sortEntries = (list, mode) => {
     const todayStr = todayInTimezone();
     const isPast = (t) => {
       const end = t.end_date || t.start_date || "";
       return !!end && end < todayStr;
     };
-    const entries = list.map((t, idx) => ({ t, idx }));
+    const byStart = (a, b) =>
+      String(a.start_date || "9999-99-99").localeCompare(String(b.start_date || "9999-99-99"));
     if (mode === "oldest") {
-      return entries.slice().sort((a, b) =>
-        String(a.t.start_date || "9999-99-99").localeCompare(String(b.t.start_date || "9999-99-99"))
-      );
+      return list.map((_, idx) => idx).sort((a, b) => byStart(list[a], list[b]));
     }
-    const upcoming = entries
-      .filter((e) => !isPast(e.t))
+    const upcoming = list
+      .map((_, idx) => idx)
+      .filter((idx) => !isPast(list[idx]))
+      .sort((a, b) => byStart(list[a], list[b]));
+    const past = list
+      .map((_, idx) => idx)
+      .filter((idx) => isPast(list[idx]))
       .sort((a, b) =>
-        String(a.t.start_date || "9999-99-99").localeCompare(String(b.t.start_date || "9999-99-99"))
-      );
-    const past = entries
-      .filter((e) => isPast(e.t))
-      .sort((a, b) =>
-        String(b.t.end_date || b.t.start_date || "").localeCompare(String(a.t.end_date || a.t.start_date || ""))
+        String(list[b].end_date || list[b].start_date || "").localeCompare(
+          String(list[a].end_date || list[a].start_date || "")
+        )
       );
     return upcoming.concat(past);
   };
 
   // Stable editing order: the row order is FROZEN while the manager edits —
   // entering or changing a date never re-sorts the list, so the form never
-  // jumps mid-entry. The order only changes when an entry is added (it stays
-  // where it was created) or removed, when a sort is chosen explicitly, or
-  // after a save (the saved list is then shown chronologically).
+  // jumps mid-entry. The order only changes when an entry is added or removed
+  // (both change the list length), when a sort is chosen explicitly, or after
+  // a save (the saved list is then shown chronologically).
   const [ordered, setOrdered] = useState(() => sortEntries(temp, "upcoming"));
-  const prevTempRef = useRef(temp);
+  const prevLenRef = useRef(temp.length);
 
   useEffect(() => {
-    const prev = prevTempRef.current;
-    prevTempRef.current = temp;
-    setOrdered((cur) => {
-      const prevSet = new Set(prev);
-      const added = temp.filter((t) => !prevSet.has(t));
-      const kept = cur.filter((t) => temp.includes(t));
-      if (!added.length && kept.length === temp.length) return cur; // date edits — order frozen
-      return kept.concat(added);
-    });
+    if (temp.length !== prevLenRef.current) {
+      prevLenRef.current = temp.length;
+      setOrdered(sortEntries(temp, tempSort));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [temp]);
 
@@ -153,7 +150,9 @@ export default function HoursEditor({ value, onChange, savedSignal = 0 }) {
           takes precedence over a recurring rule on the same date.
         </p>
         <div className="space-y-2">
-          {ordered.map(({ t, idx }) => {
+          {ordered.map((idx) => {
+            const t = temp[idx];
+            if (!t) return null;
             const end = t.end_date || t.start_date || "";
             const past = !!end && end < todayInTimezone();
             return (
