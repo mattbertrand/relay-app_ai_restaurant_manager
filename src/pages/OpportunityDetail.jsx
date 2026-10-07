@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { activityLabel, isUserFacingActivity } from "@/lib/activityLabels";
+import FollowUpsOnSource from "@/components/FollowUpsOnSource";
 import { cn } from "@/lib/utils";
 import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 import { htmlToPlainText } from "@/lib/draftText";

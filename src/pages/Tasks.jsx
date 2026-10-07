@@ -197,15 +197,39 @@ export default function Tasks() {
   });
   overdue.sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
 
+  // Within a section, follow-ups from the same source item sit together —
+  // the manager sees at a glance that several actions belong to one issue.
+  // Everything else keeps its due-date order.
+  const groupBySource = (list) => {
+    const counts = {};
+    list.forEach((t) => {
+      const k = t.source_id || "";
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    });
+    const withIndex = list.map((t, i) => ({ t, i }));
+    withIndex.sort((a, b) => {
+      const ka = counts[a.t.source_id || ""] >= 2 ? a.t.source_id : "";
+      const kb = counts[b.t.source_id || ""] >= 2 ? b.t.source_id : "";
+      if (ka !== kb) {
+        if (ka && !kb) return -1;
+        if (!ka && kb) return 1;
+        return ka < kb ? -1 : 1;
+      }
+      return a.i - b.i;
+    });
+    return withIndex.map(({ t }) => t);
+  };
+
   const renderSection = (label, list, dimmed = false) => {
     if (!list.length) return null;
+    const ordered = groupBySource(list);
     return (
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-foreground mb-2">
           {label} <span className="text-muted-foreground font-normal">({list.length})</span>
         </h2>
         <div className={cn("space-y-2", dimmed && "opacity-75")}>
-          {list.map((t) => (
+          {ordered.map((t) => (
             <TaskCard
               key={t.id}
               task={t}
