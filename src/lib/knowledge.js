@@ -188,6 +188,38 @@ export function emptyKnowledge() {
 
 // Merges a stored profile record over the defaults so the editor always
 // works with a complete structure, even for records saved by older versions.
+
+// Sanitize stored special-hours data: drop invalid entries and fill missing
+// fields, so a malformed saved record can never crash the editors.
+const cleanTempHours = (list) =>
+  (Array.isArray(list) ? list : [])
+    .filter((t) => t && typeof t === "object")
+    .map((t) => ({
+      label: t.label || "",
+      start_date: t.start_date || "",
+      end_date: t.end_date || "",
+      note: t.note || "",
+    }));
+
+const cleanExceptions = (list) =>
+  (Array.isArray(list) ? list : [])
+    .filter((x) => x && typeof x === "object")
+    .map((x) => ({ date: x.date || "", note: x.note || "" }));
+
+const cleanRecurringRules = (list) =>
+  (Array.isArray(list) ? list : [])
+    .filter((r) => r && typeof r === "object")
+    .map((r) => ({
+      label: r.label || "",
+      frequency: r.frequency || "weekly",
+      day_of_week: r.day_of_week || "Monday",
+      start_time: r.start_time || "",
+      end_time: r.end_time || "",
+      effective_start_date: r.effective_start_date || "",
+      end_date: r.end_date || "",
+      exceptions: cleanExceptions(r.exceptions),
+    }));
+
 export function knowledgeWithDefaults(record) {
   const base = emptyKnowledge();
   if (!record) return base;
@@ -195,8 +227,8 @@ export function knowledgeWithDefaults(record) {
     ...base,
     ...record,
     hours: { ...base.hours, ...(record.hours || {}) },
-    temporary_hours: record.temporary_hours || [],
-    recurring_special_hours: record.recurring_special_hours || [],
+    temporary_hours: cleanTempHours(record.temporary_hours),
+    recurring_special_hours: cleanRecurringRules(record.recurring_special_hours),
     reservations: { ...base.reservations, ...(record.reservations || {}) },
     private_events: { ...base.private_events, ...(record.private_events || {}) },
     catering: { ...base.catering, ...(record.catering || {}) },

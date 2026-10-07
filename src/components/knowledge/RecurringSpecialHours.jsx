@@ -28,7 +28,7 @@ const fmtDate = (d) => {
 };
 
 export default function RecurringSpecialHours({ value, onChange }) {
-  const rules = value.recurring_special_hours || [];
+  const rules = (value.recurring_special_hours || []).filter((r) => r && typeof r === "object");
   const [editingIdx, setEditingIdx] = useState(null);
   const [managingIdx, setManagingIdx] = useState(null);
 

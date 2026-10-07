@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 // outdated entries can be recognized and ignored.
 export default function HoursEditor({ value, onChange, savedSignal = 0 }) {
   const hours = value.hours || {};
-  const temp = value.temporary_hours || [];
+  const temp = (value.temporary_hours || []).filter((t) => t && typeof t === "object");
   const [tempSort, setTempSort] = useState("upcoming");
 
   const setDay = (day, patch) =>
