@@ -58,6 +58,7 @@ const PARSE_SCHEMA = {
         type: "object",
         properties: {
           title: { type: "string", description: "Short, specific task title naming this action's work." },
+          instruction: { type: "string", description: "The manager's exact words for THIS action only, quoted from their instruction (e.g. 'email Keith to investigate this'). Never mix in the other actions." },
           task_type: { type: "string", enum: TASK_TYPES },
           priority: { type: "string", enum: ["High", "Normal", "Low"] },
           due_date: { type: "string", description: "YYYY-MM-DD when this action's own timing was given; empty otherwise. Same resolution rules as rule 1." },
@@ -356,7 +357,7 @@ export default async function(req) {
             recipient: specRecipient,
             recipientEmail: contact || "",
             managerName,
-            topic: instruction,
+            topic: String(spec.instruction || instruction || spec.title),
             sourceType,
             sourceId,
             sourceLabel,
@@ -373,7 +374,7 @@ export default async function(req) {
         const task = await base44.entities.Task.create({
           restaurant_id: restaurantId,
           title: String(spec.title).slice(0, 200),
-          description: "",
+          description: String(spec.instruction || instruction || ""),
           task_type: specType,
           status: "Open",
           priority: specPriority,
@@ -453,7 +454,7 @@ Rules:
 4. task_type from the list. "Discuss" for bringing something up with the team or at a meeting; "Call" for phone; "Email" for writing to someone later; "Check" for verifying something; "Investigate"; "Meeting"; "Follow up"; "Customer follow-up"; "Internal follow-up"; "Other". priority "High" only for clearly urgent wording ("urgent", "asap", "right away"); "Low" for "whenever you get a chance"; otherwise "Normal".
 5. Draft requests. If the manager asks to email/message someone in the future ("email the owner after we investigate this", "email the banquet manager for tentative Dine & Donate"), set task_type "Email" and draft_requested=true. Set draft_recipient to the person, role, or team the email goes to (e.g. "the banquet manager", "the owner"). Write draft_subject plus a short, polite, plain-text draft_body the manager can edit — 1 to 3 short paragraphs, greeting on its own line, addressed to the RECIPIENT (never the customer or the manager), no signature block. Use [Name] placeholders when a name is unknown. The draft is saved in Relay only — it is never sent automatically.
 6. Duplicates. If the request clearly refers to an existing open task for this item — the same intent again, or "actually ..." adjusting it ("actually remind me tomorrow instead") — use intent "update_task" with that task's existing_task_id and the corrected details; never create a duplicate. Create a new task only when no existing task matches. If the message contains no follow-up at all (e.g. "no", "thanks"), use intent "no_task".
-7. Multiple follow-ups. The manager often commits to several SEPARATE things in one breath ("email Keith to investigate this, bring it up at today's manager meeting, and call the customer tomorrow"). That is three distinct follow-ups with three different types, recipients, and dates — list them in "tasks", one entry each, and NEVER merge them into one generic task or leave actions out. A "Meeting"/"Discuss" action and a "Call" action are never the same task as the "Email" action. Use "tasks" ONLY when there are 2+ distinct actions; a single action stays in the top-level fields. Drafts ("draft_requested"/"draft_recipient") belong to each Email action individually.
+7. Multiple follow-ups. The manager often commits to several SEPARATE things in one breath ("email Keith to investigate this, bring it up at today's manager meeting, and call the customer tomorrow"). That is three distinct follow-ups with three different types, recipients, and dates — list them in "tasks", one entry each, and NEVER merge them into one generic task or leave actions out. A "Meeting"/"Discuss" action and a "Call" action are never the same task as the "Email" action. Use "tasks" ONLY when there are 2+ distinct actions; a single action stays in the top-level fields. Drafts ("draft_requested"/"draft_recipient") belong to each Email action individually. Each entry's "instruction" quotes ONLY that action's own words from the manager's message — the email for "email Keith to investigate this" is about investigating, and must never mention the manager meeting or the phone call.
 
 Return JSON only.`,
       response_json_schema: PARSE_SCHEMA,
@@ -472,6 +473,7 @@ Return JSON only.`,
         plan: true,
         tasks: planTasks.map((t) => ({
           title: String(t.title).slice(0, 200),
+          instruction: String(t.instruction || "").slice(0, 300),
           task_type: TASK_TYPES.includes(t.task_type) ? t.task_type : "Follow up",
           priority: ["High", "Normal", "Low"].includes(t.priority) ? t.priority : "Normal",
           due_date: /^\d{4}-\d{2}-\d{2}$/.test(String(t.due_date || "")) ? t.due_date : "",
