@@ -19,6 +19,12 @@ export default function NotificationBell({ className }) {
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const timerRef = useRef(null);
+  const btnRef = useRef(null);
+  // The bell can sit at the very bottom edge of the screen (desktop sidebar)
+  // or at the top (mobile header), so the panel positions itself from the
+  // bell's actual on-screen spot: it flips open upward when there isn't room
+  // below and is always clamped fully inside the viewport.
+  const [panelStyle, setPanelStyle] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +61,24 @@ export default function NotificationBell({ className }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  const toggle = () => {
+    if (open) { setOpen(false); return; }
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const width = Math.min(320, vw - 16);
+      // Horizontal: right edge follows the bell, clamped so nothing hangs off-screen.
+      const left = Math.min(Math.max(8, rect.right - width), vw - width - 8);
+      // Vertical: open upward when there isn't room below for the panel.
+      const style = rect.bottom + 340 > vh
+        ? { left, bottom: vh - rect.top + 8 }
+        : { left, top: rect.bottom + 8 };
+      setPanelStyle(style);
+    }
+    setOpen(true);
+  };
 
   const openTask = async (taskId) => {
     setOpen(false);
@@ -101,7 +125,8 @@ export default function NotificationBell({ className }) {
   return (
     <div className={cn("relative", className)}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={toggle}
         className="relative w-8 h-8 rounded-full bg-muted hover:bg-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Notifications"
       >
@@ -116,7 +141,10 @@ export default function NotificationBell({ className }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-card rounded-xl border border-border shadow-lg overflow-hidden">
+          <div
+            className="fixed z-50 w-80 max-w-[calc(100vw-2rem)] bg-card rounded-xl border border-border shadow-lg overflow-hidden"
+            style={panelStyle || { right: 8, top: 8 }}
+          >
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
               <span className="text-sm font-semibold text-foreground">Notifications</span>
               {items.length > 0 && (
