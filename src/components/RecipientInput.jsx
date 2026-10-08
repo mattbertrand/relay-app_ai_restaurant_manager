@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, UserPlus, Check } from "lucide-react";
+import { Loader2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,7 +28,7 @@ export default function RecipientInput({
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
-  const [savedEmail, setSavedEmail] = useState("");
+  const [knownContact, setKnownContact] = useState(false);
   const wrapRef = useRef(null);
   const seqRef = useRef(0);
   const pickedNameRef = useRef("");
@@ -62,6 +62,30 @@ export default function RecipientInput({
     }, 200);
     return () => clearTimeout(t);
   }, [name, restaurantId]);
+
+  // Whether this email is already in the directory — "Save as contact" only
+  // appears for recipients Relay doesn't know yet.
+  useEffect(() => {
+    const e = String(email || "").trim();
+    if (!EMAIL_RE.test(e) || !restaurantId) {
+      setKnownContact(false);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const esc = e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const page = await base44.entities.Contact.filter(
+          { restaurant_id: restaurantId, email: { $regex: `^${esc}$`, $options: "i" } },
+          { limit: 1 }
+        );
+        if (!cancelled) setKnownContact((page.items || []).length > 0);
+      } catch {
+        if (!cancelled) setKnownContact(false);
+      }
+    }, 200);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [email, restaurantId]);
 
   // Outside click closes the suggestion list.
   useEffect(() => {
@@ -106,7 +130,7 @@ export default function RecipientInput({
           active: true,
         });
       }
-      setSavedEmail(String(email).trim());
+      setKnownContact(true);
       toast({ title: "Contact saved", description: "Relay will suggest them next time you email someone." });
     } catch (e) {
       toast({ title: "Couldn't save the contact", description: "Please try again.", variant: "destructive" });
@@ -114,10 +138,6 @@ export default function RecipientInput({
       setSavingContact(false);
     }
   };
-
-  const exactSaved =
-    savedEmail === String(email || "").trim() ||
-    matches.some((m) => (m.email || "").toLowerCase() === String(email || "").trim().toLowerCase());
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -161,21 +181,15 @@ export default function RecipientInput({
           ))}
         </div>
       )}
-      {email && EMAIL_RE.test(String(email)) && !exactSaved && (
+      {email && EMAIL_RE.test(String(email)) && !knownContact && (
         <button
           type="button"
           onClick={saveContact}
           disabled={savingContact || disabled}
           className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
-          {savingContact ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : savedEmail ? (
-            <Check className="w-3 h-3 text-emerald-600" />
-          ) : (
-            <UserPlus className="w-3 h-3" />
-          )}
-          {savedEmail ? "Contact saved" : "Save as contact"}
+          {savingContact ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+          Save as contact
         </button>
       )}
     </div>
