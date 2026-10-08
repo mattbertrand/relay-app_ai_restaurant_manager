@@ -36,6 +36,7 @@ export const ACTIVITY_LABELS = {
   task_snoozed: "Follow-up snoozed",
   email_draft_created: "Email draft created",
   email_draft_edited: "Email draft edited",
+  email_recorded_sent: "Email recorded as sent in Relay",
   conversation_workflow_updated: "Email workflow updated",
 };
 

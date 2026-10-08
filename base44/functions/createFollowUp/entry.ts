@@ -93,11 +93,11 @@ function collectContacts(knowledge) {
   return contacts.filter((c) => c.name || c.email);
 }
 
-function findContactEmail(knowledge, recipientName) {
+function findContactEmail(knowledge, recipientName, extraContacts = []) {
   const n = String(recipientName || "").toLowerCase();
   const words = n.split(/[^a-z0-9]+/).filter((w) => w.length > 2);
   if (!words.length) return null;
-  for (const c of collectContacts(knowledge)) {
+  for (const c of [...collectContacts(knowledge), ...extraContacts]) {
     if (
       c.email &&
       words.some((w) => c.name.includes(w) || c.email.toLowerCase().includes(w))
@@ -106,6 +106,30 @@ function findContactEmail(knowledge, recipientName) {
     }
   }
   return null;
+}
+
+function validEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || "").trim());
+}
+
+// Saved contacts from the restaurant's directory (Contact entity) — merged
+// with the Restaurant Profile contacts when resolving a recipient's real
+// email address. Relay never invents an address.
+async function loadDirectoryContacts(base44, restaurantId) {
+  try {
+    const page = await base44.entities.Contact.filter(
+      { restaurant_id: restaurantId, active: { $ne: false } },
+      { limit: 200 }
+    );
+    return (page.items || [])
+      .filter((c) => c && c.email)
+      .map((c) => ({
+        name: `${c.name || ""} ${c.organization || ""} ${c.role || ""}`.toLowerCase(),
+        email: String(c.email || ""),
+      }));
+  } catch (e) {
+    return [];
+  }
 }
 
 const DRAFT_SCHEMA = {
@@ -234,6 +258,7 @@ export default async function(req) {
     const payload = await req.json().catch(() => ({}));
     const knowledge = await loadKnowledge(base44, restaurantId);
     const tz = (knowledge && knowledge.timezone) || "America/Los_Angeles";
+    const directoryContacts = await loadDirectoryContacts(base44, restaurantId);
 
     // Draft regeneration: an explicit manager action on an existing task —
     // rebuilds the draft from the task's own instruction and source context.
@@ -248,7 +273,7 @@ export default async function(req) {
       const regRecipient = String(payload.recipient || task.draft_recipient || "").slice(0, 120);
       const draft = await buildDraft(base44, restaurantId, {
         recipient: regRecipient,
-        recipientEmail: task.draft_recipient_email || findContactEmail(knowledge, regRecipient) || "",
+        recipientEmail: task.draft_recipient_email || findContactEmail(knowledge, regRecipient, directoryContacts) || "",
         managerName: user.full_name || "",
         topic: task.description || task.title,
         sourceType: task.source_type,
@@ -260,7 +285,7 @@ export default async function(req) {
         draft_email: draft.body,
         draft_subject: draft.subject,
         draft_recipient: regRecipient,
-        draft_recipient_email: task.draft_recipient_email || findContactEmail(knowledge, regRecipient) || "",
+        draft_recipient_email: task.draft_recipient_email || findContactEmail(knowledge, regRecipient, directoryContacts) || "",
         draft_edited: false,
       };
       const updated = await base44.entities.Task.update(task.id, patch);
@@ -349,7 +374,8 @@ export default async function(req) {
         const specDate = /^\d{4}-\d{2}-\d{2}$/.test(String(spec.due_date || "")) ? spec.due_date : "";
         const specTime = /^\d{1,2}:\d{2}$/.test(String(spec.due_time || "")) ? spec.due_time : "";
         const specPriority = ["High", "Normal", "Low"].includes(spec.priority) ? spec.priority : "Normal";
-        const contact = findContactEmail(knowledge, specRecipient);
+        const contact = (validEmail(spec.draft_recipient_email) ? String(spec.draft_recipient_email).trim() : "") ||
+          findContactEmail(knowledge, specRecipient, directoryContacts) || "";
         let draftEmail = "";
         let draftSubject = "";
         if (specType === "Email" || spec.draft_requested) {
@@ -516,7 +542,8 @@ Return JSON only.`,
       if (llm.draft_requested || (taskType === "Email" && !target.draft_email)) {
         if (!target.draft_edited) {
           const updRecipient = recipient || llm.draft_recipient || target.draft_recipient || "";
-          const updContact = findContactEmail(knowledge, updRecipient);
+          const updContact = (validEmail(payload.recipient_email) ? String(payload.recipient_email).trim() : "") ||
+            findContactEmail(knowledge, updRecipient, directoryContacts) || "";
           const draft = await buildDraft(base44, restaurantId, {
             recipient: updRecipient,
             recipientEmail: target.draft_recipient_email || updContact || "",
@@ -560,7 +587,8 @@ Return JSON only.`,
     const wantsDraft = taskType === "Email" || llm.draft_requested;
     const draftRecipientName = recipient || llm.draft_recipient || "";
     if (wantsDraft) {
-      recipientEmail = findContactEmail(knowledge, draftRecipientName) || "";
+      recipientEmail = (validEmail(payload.recipient_email) ? String(payload.recipient_email).trim() : "") ||
+        findContactEmail(knowledge, draftRecipientName, directoryContacts) || "";
       const draft = await buildDraft(base44, restaurantId, {
         recipient: draftRecipientName,
         recipientEmail,

@@ -149,6 +149,32 @@ export default function Tasks() {
     );
   };
 
+  // Record the follow-up's email as sent IN RELAY ONLY — no external email
+  // is transmitted. Distinct from completing the follow-up.
+  const recordSent = async (task) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await base44.functions.invoke("recordEmailSent", {
+        task_id: task.id,
+        to_name: task.draft_recipient || "",
+        to_email: task.draft_recipient_email || "",
+        subject: task.draft_subject || "",
+        body: task.draft_email || "",
+      });
+      toast({
+        title: "Email recorded as sent",
+        description: "Recorded in Relay — no external email was sent.",
+      });
+      await load();
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Couldn't record the email", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveEdits = async (form) => {
     if (!editTask || saving) return;
     setSaving(true);
@@ -239,7 +265,7 @@ export default function Tasks() {
               onReopen={reopenTask}
               onSnooze={snoozeTask}
               onEdit={(task) => { setEditTask(task); setEditOpen(true); }}
-              onSource={(task) => navigateToSource(navigate, task, { fromTasks: true })}
+              onSource={(task) => navigateToSource(navigate, task, { fromTasks: true })} onRecordSent={recordSent}
               onDraft={(task) => { setDraftTask(task); setDraftOpen(true); }}
               onUpdate={async (patch) => {
                 await base44.entities.Task.update(t.id, patch);
@@ -313,7 +339,7 @@ export default function Tasks() {
                     onReopen={reopenTask}
                     onSnooze={snoozeTask}
                     onEdit={(task) => { setEditTask(task); setEditOpen(true); }}
-                    onSource={(task) => navigateToSource(navigate, task, { fromTasks: true })}
+                    onSource={(task) => navigateToSource(navigate, task, { fromTasks: true })} onRecordSent={recordSent}
                     onDraft={(task) => { setDraftTask(task); setDraftOpen(true); }}
                     onUpdate={async (patch) => {
                       await base44.entities.Task.update(t.id, patch);

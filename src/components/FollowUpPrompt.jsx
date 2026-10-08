@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { taskWhenLabel } from "@/lib/taskSource";
 import TaskDraftDialog from "@/components/TaskDraftDialog";
+import RecipientInput from "@/components/RecipientInput";
+import { useAuth } from "@/lib/AuthContext";
+import { getRestaurantId } from "@/lib/format";
 import { todayInTimezone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -66,11 +69,16 @@ export function resolveTimeframe(id, customDate, customTime, today) {
 
 export default function FollowUpPrompt({ open, onOpenChange, source, headline, question }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const restaurantId = getRestaurantId(user);
   const navigate = useNavigate();
   const [step, setStep] = useState("choose"); // choose → details → confirm
   const [action, setAction] = useState(null);
   const [instruction, setInstruction] = useState("");
   const [recipient, setRecipient] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [emailMode, setEmailMode] = useState(""); // "" | "later" — how the manager handles an email follow-up
+  const [emailNow, setEmailNow] = useState(false);
   const [timeframe, setTimeframe] = useState("");
   const [customDate, setCustomDate] = useState("");
   const [customTime, setCustomTime] = useState("");
@@ -91,6 +99,9 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
     setAction(null);
     setInstruction("");
     setRecipient("");
+    setRecipientEmail("");
+    setEmailMode("");
+    setEmailNow(false);
     setTimeframe("");
     setCustomDate("");
     setCustomTime("");
@@ -161,10 +172,57 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
       instruction: instruction.trim(),
       action_type: action.id,
       recipient: action.email ? recipient.trim() : "",
+      recipient_email: action.email ? recipientEmail.trim() : "",
       due_date: (tf && tf.due_date) || "",
       due_time: (tf && tf.due_time) || "",
       priority: (tf && tf.priority) || "",
     });
+  };
+
+  // "Email now" — creates the email follow-up right away (no date) and opens
+  // the composer. Recording as sent happens in the composer; Relay never
+  // transmits the email itself.
+  const startEmailNow = async () => {
+    if (busy || !instruction.trim()) return;
+    setBusy(true);
+    try {
+      const res = await base44.functions.invoke("createFollowUp", {
+        source_type: source.type,
+        source_id: source.id,
+        source_label: source.label,
+        source_summary: source.summary,
+        source_is_demo: !!source.isDemo,
+        instruction: instruction.trim(),
+        action_type: "email",
+        recipient: recipient.trim(),
+        recipient_email: recipientEmail.trim(),
+      });
+      const d = res.data || {};
+      if (d.no_task) {
+        onOpenChange(false);
+        return;
+      }
+      if (d.plan) {
+        setPlan(d.tasks || []);
+        setPlanInstruction(instruction.trim());
+        setStep("plan");
+        setInstruction("");
+        return;
+      }
+      if (d.task) {
+        setResult(d);
+        setDraftTask(d.task);
+        setDraftOpen(true);
+        setEmailNow(true);
+        setStep("confirm");
+        setInstruction("");
+      }
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Couldn't create the follow-up", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Direct free-form creation from the choose step (no chip) — Relay parses
@@ -293,6 +351,15 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
                 placeholder="Or describe it in your own words…"
                 disabled={busy}
               />
+              <Button
+                type="submit"
+                size="sm"
+                className="mt-2 w-full"
+                disabled={busy || !quickInput.trim()}
+              >
+                {busy ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : null}
+                Create Follow-up
+              </Button>
             </form>
             {busy && (
               <p className="text-xs text-muted-foreground flex items-center gap-2">
@@ -323,10 +390,12 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
             {action.email && (
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Who should receive it?</Label>
-                <Input
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  placeholder="e.g. Banquet Manager"
+                <RecipientInput
+                  restaurantId={restaurantId}
+                  name={recipient}
+                  email={recipientEmail}
+                  onNameChange={setRecipient}
+                  onEmailChange={setRecipientEmail}
                   disabled={busy}
                 />
               </div>
@@ -342,47 +411,115 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
                 autoFocus
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">When?</Label>
-              <div className="flex flex-wrap gap-2">
-                {TIMEFRAMES.map((t) => (
-                  <button
-                    key={t.id}
+            {action.email ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">How do you want to handle the email?</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
                     type="button"
-                    disabled={busy}
-                    onClick={() => setTimeframe(t.id)}
-                    className={cn(
-                      chipCls,
-                      timeframe === t.id && "bg-primary text-primary-foreground border-primary"
-                    )}
+                    variant="outline"
+                    onClick={startEmailNow}
+                    disabled={busy || !instruction.trim()}
                   >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              {timeframe === "custom" && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <Input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} />
-                  <Input type="time" value={customTime} onChange={(e) => setCustomTime(e.target.value)} placeholder="Optional time" />
+                    <Mail className="w-3.5 h-3.5 mr-1.5" /> Email now
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={emailMode === "later" ? "default" : "outline"}
+                    onClick={() => setEmailMode(emailMode === "later" ? "" : "later")}
+                    disabled={busy}
+                  >
+                    <Clock className="w-3.5 h-3.5 mr-1.5" /> Remind me to send it later
+                  </Button>
                 </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between pt-1">
-              {busy ? (
-                <p className="text-xs text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Working on it…
-                </p>
-              ) : (
-                <span />
-              )}
-              <Button
-                size="sm"
-                onClick={createFromDetails}
-                disabled={busy || !instruction.trim() || (timeframe === "custom" && !customDate)}
-              >
-                Create Follow-up
-              </Button>
-            </div>
+                {emailMode === "later" && (
+                  <>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {TIMEFRAMES.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setTimeframe(t.id)}
+                          className={cn(
+                            chipCls,
+                            timeframe === t.id && "bg-primary text-primary-foreground border-primary"
+                          )}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    {timeframe === "custom" && (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <Input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} />
+                        <Input type="time" value={customTime} onChange={(e) => setCustomTime(e.target.value)} placeholder="Optional time" />
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-1">
+                      {busy ? (
+                        <p className="text-xs text-muted-foreground flex items-center gap-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Working on it…
+                        </p>
+                      ) : (
+                        <span />
+                      )}
+                      <Button
+                        size="sm"
+                        onClick={createFromDetails}
+                        disabled={busy || !instruction.trim() || (timeframe === "custom" && !customDate)}
+                      >
+                        Create Follow-up
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">When?</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {TIMEFRAMES.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setTimeframe(t.id)}
+                        className={cn(
+                          chipCls,
+                          timeframe === t.id && "bg-primary text-primary-foreground border-primary"
+                        )}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {timeframe === "custom" && (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <Input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} />
+                      <Input type="time" value={customTime} onChange={(e) => setCustomTime(e.target.value)} placeholder="Optional time" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  {busy ? (
+                    <p className="text-xs text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Working on it…
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={createFromDetails}
+                    disabled={busy || !instruction.trim() || (timeframe === "custom" && !customDate)}
+                  >
+                    Create Follow-up
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -505,9 +642,14 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
                     {taskWhenLabel(result.task, today)}
                     {result.task.source_label ? ` · ${result.task.source_label}` : ""}
                   </p>
-                  {result.task.draft_email && (
+                  {result.task.draft_email && !result.task.email_recorded_sent && (
                     <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
                       <Mail className="w-3.5 h-3.5" /> A draft email is attached — saved in Relay only, nothing sent.
+                    </p>
+                  )}
+                  {result.task.email_recorded_sent && (
+                    <p className="text-xs text-emerald-700 mt-1.5 flex items-start gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" /> Email recorded as sent in Relay — no external email was sent.
                     </p>
                   )}
                 </div>
@@ -544,7 +686,16 @@ export default function FollowUpPrompt({ open, onOpenChange, source, headline, q
           open={draftOpen}
           onOpenChange={setDraftOpen}
           task={draftTask}
-          onSaved={(updated) => setResult((r) => (r && r.task && r.task.id === updated.id ? { ...r, task: updated } : r))}
+          mode={emailNow ? "now" : "draft"}
+          onSaved={(updated) => {
+            setDraftTask(updated);
+            setResult((r) => (r && r.task && r.task.id === updated.id ? { ...r, task: updated } : r));
+          }}
+          onRecorded={(updated) => {
+            setDraftTask(updated);
+            setResult({ created_new: true, updated_existing: false, task: updated });
+            setDraftOpen(false);
+          }}
         />
       )}
     </Dialog>

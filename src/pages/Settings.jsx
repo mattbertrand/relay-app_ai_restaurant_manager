@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import GmailIntegrationCard from "@/components/GmailIntegrationCard";
+import ContactsEditor from "@/components/contacts/ContactsEditor";
 import { getRestaurantId } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -215,7 +216,7 @@ export default function Settings() {
       {tab === "Team" && (
         <div className="bg-card rounded-xl border border-border p-6">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-1">Team Members</h2>
-          <p className="text-sm text-muted-foreground mb-5">Invite your team to help manage customer opportunities.</p>
+          <p className="text-sm text-muted-foreground mb-5">People on your restaurant's team — available wherever Relay asks who to email, call, or talk to.</p>
           <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/40 mb-4">
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold">
               {(user?.full_name || user?.email || "U").charAt(0).toUpperCase()}
@@ -226,10 +227,7 @@ export default function Settings() {
             </div>
             <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">Owner</span>
           </div>
-          <div className="text-center py-8 border border-dashed border-border rounded-lg">
-            <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Team invitations coming soon.</p>
-          </div>
+          <ContactsEditor restaurantId={getRestaurantId(user)} teamOnly />
         </div>
       )}
 

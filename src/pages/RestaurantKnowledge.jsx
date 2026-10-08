@@ -17,6 +17,7 @@ import FinanceEditor from "@/components/knowledge/FinanceEditor";
 import OperationsEditor from "@/components/knowledge/OperationsEditor";
 import MarketingEditor from "@/components/knowledge/MarketingEditor";
 import ResponseTemplatesEditor from "@/components/knowledge/ResponseTemplatesEditor";
+import ContactsEditor from "@/components/contacts/ContactsEditor";
 import { TextField, SelectField } from "@/components/knowledge/Fields";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -85,6 +86,7 @@ const GROUPS = [
     sections: [
       { id: "hr", icon: Briefcase, title: "HR & employment", description: "How hiring works at your restaurant — so job-related emails are understood and never treated as customer opportunities." },
       { id: "vendors", icon: Truck, title: "Vendors", description: "Suppliers you already work with — Relay recognizes their emails and keeps vendor mail out of customer opportunities." },
+      { id: "contacts", icon: Users, title: "Contacts", description: "Recurring contacts — vendors, customers, partners, organizations, event and community contacts. Relay suggests these when you email someone — real addresses, never invented." },
       { id: "finance", icon: Wallet, title: "Finance & billing", description: "How invoices and payments are handled — trusted context Relay uses to interpret billing email." },
       { id: "operations", icon: Wrench, title: "Operations", description: "How the restaurant runs day to day — used carefully when an email touches equipment or urgent matters." },
       { id: "marketing", icon: Megaphone, title: "Marketing", description: "Promotions, social media, and brand context for marketing-related emails." },
@@ -294,6 +296,12 @@ export default function RestaurantKnowledge() {
         return (
           <KnowledgeSection {...common}>
             <MarketingEditor value={knowledge} onChange={setKnowledge} />
+          </KnowledgeSection>
+        );
+      case "contacts":
+        return (
+          <KnowledgeSection {...common}>
+            <ContactsEditor restaurantId={getRestaurantId(user)} />
           </KnowledgeSection>
         );
       case "templates":

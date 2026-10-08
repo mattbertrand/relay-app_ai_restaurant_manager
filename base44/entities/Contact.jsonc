@@ -1,0 +1,73 @@
+{
+  "name": "Contact",
+  "type": "object",
+  "description": "A saved contact in the restaurant's directory \u2014 a team member or a recurring external contact (vendor, customer, partner, organization, event or community contact). Relay suggests saved contacts when the manager chooses who to email, call, or talk to; it resolves real email addresses only from saved contacts or known conversation data, and never invents an address.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "description": "The contact's name, e.g. 'Keith Smith'."
+    },
+    "organization": {
+      "type": "string",
+      "description": "Optional organization or company, e.g. 'ABC Vendor', 'HopMonk Events'."
+    },
+    "role": {
+      "type": "string",
+      "description": "Optional role or title, e.g. 'Banquet Manager', 'Account Representative', 'General Manager'."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "team_member",
+        "vendor",
+        "customer",
+        "partner",
+        "organization",
+        "event",
+        "community",
+        "leadership",
+        "other"
+      ],
+      "default": "other",
+      "description": "Directory category. Team members (team_member) are managed in Settings \u2192 Team; all other categories live in Restaurant Profile \u2192 Contacts."
+    },
+    "email": {
+      "type": "string",
+      "description": "The contact's real email address \u2014 always manager-entered or selected from known conversation data, never invented."
+    },
+    "phone": {
+      "type": "string",
+      "description": "Optional phone number."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional free-form notes."
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Inactive contacts are kept for history but no longer suggested as recipients."
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "name"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

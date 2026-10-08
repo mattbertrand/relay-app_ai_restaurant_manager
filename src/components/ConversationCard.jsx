@@ -5,6 +5,7 @@ import AnalysisPanel from "@/components/AnalysisPanel";
 import AttentionReply from "@/components/AttentionReply";
 import ConversationOriginal from "@/components/ConversationOriginal";
 import PreviousAnalysis from "@/components/PreviousAnalysis";
+import SaveContactButton from "@/components/SaveContactButton";
 import ReanalyzeButton from "@/components/ReanalyzeButton";
 import { Button } from "@/components/ui/button";
 import { Mail, Archive, AlertCircle, Undo2, Loader2 } from "lucide-react";
@@ -83,7 +84,14 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
             </div>
           </div>
           {isLive && convo.customer_email && (
-            <p className="text-xs text-muted-foreground">{convo.customer_email}</p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-muted-foreground">{convo.customer_email}</p>
+              <SaveContactButton
+                restaurantId={convo.restaurant_id}
+                name={convo.customer_name}
+                email={convo.customer_email}
+              />
+            </div>
           )}
           <h3 className="text-sm font-medium text-foreground mt-2">{convo.subject}</h3>
           {isLive && hasAnalysis && convo.analysis_state !== "failed" && (

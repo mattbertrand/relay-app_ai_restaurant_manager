@@ -112,12 +112,34 @@
     },
     "draft_recipient_email": {
       "type": "string",
-      "description": "The recipient's actual email address, when one is known \u2014 resolved from the Restaurant Profile or entered by the manager. Never invented: a draft whose recipient has no known address is shown as needing one before it could ever be sent."
+      "description": "The recipient's actual email address, when one is known \u2014 resolved from saved contacts or entered by the manager. Never invented: a draft whose recipient has no known address is shown as needing one before it could ever be sent."
     },
     "draft_edited": {
       "type": "boolean",
       "default": false,
       "description": "True once the manager edited the task's draft email."
+    },
+    "email_recorded_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once the manager recorded this follow-up's email as sent in Relay \u2014 meaning they sent it themselves from their own inbox. Relay never transmits email; recording is distinct from completing the follow-up."
+    },
+    "email_recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the email was recorded as sent in Relay."
+    },
+    "email_recorded_to": {
+      "type": "string",
+      "description": "Who the recorded-as-sent email went to (name/role)."
+    },
+    "email_recorded_to_email": {
+      "type": "string",
+      "description": "The real email address the recorded-as-sent email went to."
+    },
+    "email_recorded_subject": {
+      "type": "string",
+      "description": "The subject of the recorded-as-sent email."
     },
     "completed_at": {
       "type": "string",

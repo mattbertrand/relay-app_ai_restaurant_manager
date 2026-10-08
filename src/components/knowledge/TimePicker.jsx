@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // A conventional 12-hour US time picker: hour + minute + AM/PM, no long
 // scrolling lists. Stores the same "HH:mm" 24-hour value as before, so
 // existing saved times keep working and nothing changes in storage.
 //
-// Layout contract: every part has its own fixed width and the clear button
-// its own space — the parts wrap rather than ever overlap, no matter how
-// narrow the column around them is. Chevrons sit in reserved padding, so the
-// selected value is always fully readable.
+// Layout contract: every part has its own fixed, generous width and its own
+// reserved chevron space (the native select arrow is hidden and replaced by
+// an icon inside that reserved space), so the selected value is always fully
+// readable — hour 1–12, minutes, and AM/PM never clip or get overlapped, no
+// matter how narrow the surrounding column is. Parts wrap rather than overlap.
 const HOURS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const MINUTES = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
 
@@ -23,8 +24,31 @@ function toParts(value) {
   return { hour: String(h), minute: m[2], period };
 }
 
+// appearance-none hides the OS chevron; a custom icon sits inside the
+// reserved right padding, so it can never cover the value.
 const selectClass =
-  "h-9 shrink-0 rounded-md border border-input bg-transparent pl-2 pr-7 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring";
+  "h-9 shrink-0 appearance-none rounded-md border border-input bg-card pl-3 pr-8 text-sm text-foreground leading-none focus:outline-none focus:ring-1 focus:ring-ring";
+
+function TimeSelect({ label, value, options, emptyLabel, onChange, className }) {
+  return (
+    <span className={cn("relative inline-block shrink-0", className)}>
+      <select
+        aria-label={label}
+        className={selectClass}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{emptyLabel}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+    </span>
+  );
+}
 
 export default function TimePicker({ value, onChange, disabled, className }) {
   const [sel, setSel] = useState(() => toParts(value));
@@ -53,49 +77,37 @@ export default function TimePicker({ value, onChange, disabled, className }) {
   const hasValue = sel.hour || sel.minute || sel.period;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1", disabled && "pointer-events-none opacity-50", className)}>
-      <select
-        aria-label="Hour"
-        className={cn(selectClass, "w-14")}
+    <div className={cn("flex flex-wrap items-center gap-1 min-w-0", disabled && "pointer-events-none opacity-50", className)}>
+      <TimeSelect
+        label="Hour"
         value={sel.hour}
-        onChange={(e) => update({ hour: e.target.value })}
-      >
-        <option value="">HH</option>
-        {HOURS.map((h) => (
-          <option key={h} value={h}>
-            {h}
-          </option>
-        ))}
-      </select>
+        options={HOURS}
+        emptyLabel="HH"
+        onChange={(v) => update({ hour: v })}
+        className="w-[4.25rem]"
+      />
       <span className="text-muted-foreground text-sm shrink-0">:</span>
-      <select
-        aria-label="Minute"
-        className={cn(selectClass, "w-14")}
+      <TimeSelect
+        label="Minute"
         value={sel.minute}
-        onChange={(e) => update({ minute: e.target.value })}
-      >
-        <option value="">MM</option>
-        {MINUTES.map((m) => (
-          <option key={m} value={m}>
-            {m}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="AM or PM"
-        className={cn(selectClass, "w-16")}
+        options={MINUTES}
+        emptyLabel="MM"
+        onChange={(v) => update({ minute: v })}
+        className="w-[4.25rem]"
+      />
+      <TimeSelect
+        label="AM or PM"
         value={sel.period}
-        onChange={(e) => update({ period: e.target.value })}
-      >
-        <option value="">--</option>
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </select>
+        options={["AM", "PM"]}
+        emptyLabel="--"
+        onChange={(v) => update({ period: v })}
+        className="w-[4.75rem]"
+      />
       {hasValue && !disabled && (
         <button
           type="button"
           onClick={clear}
-          className="shrink-0 w-7 h-7 -ml-0.5 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+          className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
           aria-label="Clear time"
         >
           <X className="w-3.5 h-3.5" />

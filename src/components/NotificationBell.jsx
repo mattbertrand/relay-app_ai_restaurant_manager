@@ -24,7 +24,7 @@ export default function NotificationBell({ className }) {
     try {
       const page = await base44.entities.Notification.filter(
         { read_at: null },
-        { sort: "-created_date", limit: 20 }
+        { sort: "-created_date", limit: 50 }
       );
       setItems(page.items || []);
     } catch (e) {
@@ -108,7 +108,7 @@ export default function NotificationBell({ className }) {
         <Bell className="w-4 h-4" />
         {items.length > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
-            {items.length > 9 ? "9+" : items.length}
+            {items.length > 99 ? "99+" : items.length}
           </span>
         )}
       </button>

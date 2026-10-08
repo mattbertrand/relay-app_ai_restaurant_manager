@@ -9,16 +9,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Loader2, Save, RefreshCw } from "lucide-react";
+import { Mail, Loader2, Save, RefreshCw, Send } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { taskActivity } from "@/lib/taskSource";
+import { useAuth } from "@/lib/AuthContext";
+import { getRestaurantId } from "@/lib/format";
+import RecipientInput from "@/components/RecipientInput";
 
-// A follow-up task's draft email, edited in a proper space: To, Subject, and
-// the full body. The draft is saved in Relay only — Relay never sends email
-// automatically. Regeneration rebuilds the draft from the manager's original
-// instruction and the source item.
-export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// A follow-up's email draft: To (with saved-contact suggestions), email
+// address, subject, and body. Drafts are saved in Relay only — Relay never
+// sends email. "Record as sent" records that the manager sent the email
+// themselves from their own inbox; no external email is transmitted.
+export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onRecorded, mode = "draft" }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const restaurantId = getRestaurantId(user);
   const [recipient, setRecipient] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [subject, setSubject] = useState("");
@@ -26,6 +33,7 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
   const [seeded, setSeeded] = useState(null);
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [recording, setRecording] = useState(false);
 
   if (open && task && seeded !== task.id) {
     setSeeded(task.id);
@@ -33,9 +41,6 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
     setRecipientEmail(task.draft_recipient_email || "");
     setSubject(task.draft_subject || "");
     setBody(task.draft_email || "");
-  }
-  if (!open && seeded) {
-    // keep the last seeded values until reopened; harmless
   }
 
   if (!open || !task) return null;
@@ -92,35 +97,86 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
     }
   };
 
+  const recordSent = async () => {
+    if (recording) return;
+    if (!EMAIL_RE.test(recipientEmail.trim())) {
+      toast({
+        title: "Email address required",
+        description: "Relay doesn't have a real address for this recipient and won't invent one.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setRecording(true);
+    try {
+      const res = await base44.functions.invoke("recordEmailSent", {
+        task_id: task.id,
+        to_name: recipient.trim(),
+        to_email: recipientEmail.trim(),
+        subject: subject.trim(),
+        body,
+      });
+      const updated =
+        (res.data && res.data.task) || {
+          ...task,
+          draft_recipient: recipient.trim(),
+          draft_recipient_email: recipientEmail.trim(),
+          draft_subject: subject.trim(),
+          draft_email: body,
+          email_recorded_sent: true,
+        };
+      toast({ title: "Email recorded as sent", description: "Recorded in Relay — no external email was sent." });
+      if (onRecorded) onRecorded(updated);
+      else if (onSaved) onSaved(updated);
+      onOpenChange(false);
+    } catch (err) {
+      toast({
+        title: "Couldn't record the email",
+        description: (err && err.message) || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRecording(false);
+    }
+  };
+
+  const emailOk = EMAIL_RE.test(recipientEmail.trim());
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Mail className="w-4 h-4 text-muted-foreground" /> Draft email
+            <Mail className="w-4 h-4 text-muted-foreground" /> {mode === "now" ? "Email now" : "Draft email"}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">To (name or role)</Label>
-            <Input
-              value={recipient}
-              onChange={(e) => setRecipient(e.target.value)}
-              placeholder="Who should receive it — e.g. Banquet Manager"
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <RecipientInput
+              restaurantId={restaurantId}
+              name={recipient}
+              email={recipientEmail}
+              onNameChange={setRecipient}
+              onEmailChange={setRecipientEmail}
+              disabled={saving || recording || regenerating}
+              placeholder="e.g. Keith, Banquet Manager"
+              autoFocus
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Recipient email address</Label>
+            <Label className="text-xs text-muted-foreground">Email address</Label>
             <Input
               type="email"
               value={recipientEmail}
               onChange={(e) => setRecipientEmail(e.target.value)}
-              placeholder="e.g. keith@yourrestaurant.com"
+              placeholder="e.g. keith@example.com"
+              disabled={saving || recording || regenerating}
             />
             {recipient.trim() && !recipientEmail.trim() && (
               <p className="text-xs text-amber-700">
                 Email address required — Relay doesn't have one for {recipient.trim()} and won't invent it. Enter the
-                real address before this draft could ever be sent.
+                real address before this email can be recorded as sent.
               </p>
             )}
           </div>
@@ -130,6 +186,7 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Subject"
+              disabled={saving || recording || regenerating}
             />
           </div>
           <div className="space-y-1">
@@ -139,15 +196,18 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="The email body…"
+              disabled={saving || recording || regenerating}
             />
           </div>
           <p className="text-xs text-muted-foreground flex items-start gap-1.5">
             <Mail className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            Saved in Relay only — no email has been sent.
+            {mode === "now"
+              ? "No external email will be sent yet. Relay will record this email as sent."
+              : "Saved in Relay only — no email has been sent."}
           </p>
         </div>
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <Button variant="outline" size="sm" onClick={regenerate} disabled={regenerating || saving}>
+        <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+          <Button variant="outline" size="sm" onClick={regenerate} disabled={regenerating || saving || recording}>
             {regenerating ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Regenerating…
@@ -159,15 +219,26 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved }) {
             )}
           </Button>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={saving || recording}>
               Cancel
             </Button>
-            <Button size="sm" onClick={save} disabled={saving}>
+            <Button variant="outline" size="sm" onClick={save} disabled={saving || recording}>
               {saving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
               Save draft
             </Button>
+            <Button size="sm" onClick={recordSent} disabled={recording || saving || !emailOk || !subject.trim()}>
+              {recording ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5 mr-1.5" />
+              )}
+              Record as sent
+            </Button>
           </div>
         </div>
+        <p className="text-[11px] text-muted-foreground text-right -mt-1">
+          Record as sent only records it in Relay — no external email is transmitted.
+        </p>
       </DialogContent>
     </Dialog>
   );

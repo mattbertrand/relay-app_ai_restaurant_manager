@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CheckCircle2, Clock, Pencil, RotateCcw, ChevronRight, Mail } from "lucide-react";
+import { CheckCircle2, Clock, Pencil, RotateCcw, ChevronRight, Mail, Send } from "lucide-react";
 import { taskWhenLabel, isOverdue, isSnoozed, navigateToSource, snoozeOptions, zonedToUtcIso } from "@/lib/taskSource";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +41,7 @@ export default function TaskCard({
   onSource,
   onUpdate,
   onDraft,
+  onRecordSent,
   focused = false,
 }) {
   const [customOpen, setCustomOpen] = useState(false);
@@ -80,18 +81,47 @@ export default function TaskCard({
           {task.completion_note && task.status === "Completed" && (
             <p className="text-xs text-muted-foreground mt-1">Note: {task.completion_note}</p>
           )}
+          {task.status === "Completed" && task.email_recorded_sent && (
+            <p className="text-xs text-muted-foreground mt-1">Email recorded as sent in Relay — no external email was sent.</p>
+          )}
           {task.description && task.status !== "Completed" && (
             <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
           )}
-          {task.status !== "Completed" && (task.task_type === "Email" || task.draft_email) && (
-            <div className="mt-2">
-              <Button variant="outline" size="sm" onClick={() => onDraft && onDraft(task)}>
-                <Mail className="w-3.5 h-3.5 mr-1.5" />
-                {task.draft_email ? "View draft" : "Write Email"}
-              </Button>
-              {task.draft_email && (
-                <p className="text-xs text-muted-foreground mt-1">Draft saved in Relay — no email has been sent.</p>
+          {task.status !== "Completed" && task.task_type === "Email" && (
+            <div className="mt-2 rounded-lg border border-border bg-muted/30 p-2.5 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-x-2 text-xs">
+                <span className="text-muted-foreground">To:</span>
+                <span className="font-medium text-foreground">{task.draft_recipient || "—"}</span>
+                {task.draft_recipient_email ? (
+                  <span className="text-muted-foreground">&lt;{task.draft_recipient_email}&gt;</span>
+                ) : (
+                  <span className="text-amber-700 font-medium">Email address required</span>
+                )}
+              </div>
+              {task.email_recorded_sent ? (
+                <p className="text-xs text-emerald-700">
+                  Email recorded as sent in Relay — no external email was sent.
+                </p>
+              ) : task.draft_email ? (
+                <p className="text-xs text-muted-foreground">Email draft saved in Relay. No external email has been sent.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">No draft yet.</p>
               )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={() => onDraft && onDraft(task)}>
+                  <Mail className="w-3.5 h-3.5 mr-1.5" /> Edit draft
+                </Button>
+                {!task.email_recorded_sent && task.draft_email && onRecordSent && (
+                  <Button
+                    size="sm"
+                    onClick={() => onRecordSent(task)}
+                    disabled={!task.draft_recipient_email}
+                    title={task.draft_recipient_email ? "" : "Add the recipient's email address first"}
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1.5" /> Record as sent
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>
