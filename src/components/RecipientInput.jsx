@@ -31,10 +31,13 @@ export default function RecipientInput({
   const [savedEmail, setSavedEmail] = useState("");
   const wrapRef = useRef(null);
   const seqRef = useRef(0);
+  const pickedNameRef = useRef("");
 
   useEffect(() => {
     const q = String(name || "").trim();
-    if (!q || q.includes("@") || !restaurantId) {
+    // A just-picked contact's full name still matches the typed text —
+    // suppress suggestions for it so the list doesn't reopen after picking.
+    if (!q || q.includes("@") || !restaurantId || q.toLowerCase() === pickedNameRef.current) {
       setMatches([]);
       setOpen(false);
       return;
@@ -71,8 +74,10 @@ export default function RecipientInput({
   }, [open]);
 
   const pick = (c) => {
+    pickedNameRef.current = String(c.name || "").toLowerCase();
     onNameChange(c.name || "");
     if (c.email) onEmailChange(c.email);
+    setMatches([]);
     setOpen(false);
   };
 
