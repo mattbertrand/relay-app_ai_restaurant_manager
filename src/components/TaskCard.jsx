@@ -56,9 +56,9 @@ export default function TaskCard({
       id={`task-${task.id}`}
       className={cn(
         "rounded-xl border bg-card p-4 transition-shadow",
-        focused ? "border-primary/50 shadow-sm" : "border-border",
         overdue && !snoozed && "border-red-200 bg-red-50/40",
-        task.status === "Completed" && "opacity-70"
+        task.status === "Completed" && "opacity-70",
+        focused && "border-primary ring-2 ring-primary/25 shadow-sm"
       )}
     >
       <div className="flex items-start gap-3">

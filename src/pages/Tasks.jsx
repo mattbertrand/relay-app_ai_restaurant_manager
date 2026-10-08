@@ -206,6 +206,23 @@ export default function Tasks() {
 
   const today = todayInTimezone();
 
+  // When the manager arrives from a reminder, a source item, or Today, the
+  // follow-up they came for is scrolled into view, highlighted, and named —
+  // so they always know which card to look at.
+  const focusedTask = focusTaskId && tasks
+    ? [...((tasks && tasks.active) || []), ...((tasks && tasks.completed) || [])]
+        .find((t) => t.id === focusTaskId)
+    : null;
+
+  useEffect(() => {
+    if (!focusTaskId || loading || !focusedTask) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`task-${focusTaskId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [focusTaskId, loading, focusedTask]);
+
   // Section split over the loaded page — the whole active list is shown,
   // grouped for scanning, with overdue surfaced first.
   const active = (tasks && tasks.active) || [];
@@ -303,6 +320,15 @@ export default function Tasks() {
         />
         {searching && <Loader2 className="w-4 h-4 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />}
       </div>
+
+      {focusTaskId && focusedTask && (
+        <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+          <p className="text-sm text-foreground">
+            Highlighted below: <span className="font-medium">{focusedTask.title}</span>
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center min-h-[40vh]">
