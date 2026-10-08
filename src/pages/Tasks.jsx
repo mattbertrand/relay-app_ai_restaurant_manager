@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
@@ -214,8 +214,11 @@ export default function Tasks() {
         .find((t) => t.id === focusTaskId)
     : null;
 
+  const scrolledForRef = useRef(null);
   useEffect(() => {
     if (!focusTaskId || loading || !focusedTask) return;
+    if (scrolledForRef.current === focusTaskId) return; // scroll once per arrival — not after edits
+    scrolledForRef.current = focusTaskId;
     const timer = setTimeout(() => {
       const el = document.getElementById(`task-${focusTaskId}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
