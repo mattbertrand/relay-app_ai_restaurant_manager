@@ -1,0 +1,71 @@
+{
+  "name": "EmailDraft",
+  "type": "object",
+  "description": "An email written in Relay's Compose tool. Saved in Relay only and never sent automatically \u2014 when the manager records it as sent, Relay records that they sent it themselves from their own inbox.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "to_names": {
+      "type": "string",
+      "description": "To recipients' names, comma-separated."
+    },
+    "to_emails": {
+      "type": "string",
+      "description": "To recipients' real email addresses, comma-separated \u2014 from saved contacts or entered by the manager, never invented."
+    },
+    "cc_emails": {
+      "type": "string",
+      "description": "Cc addresses, comma-separated."
+    },
+    "bcc_emails": {
+      "type": "string",
+      "description": "Bcc addresses, comma-separated."
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "recorded"
+      ],
+      "default": "draft",
+      "description": "draft = still being written; recorded = the manager recorded this email as sent from their own inbox. Relay never transmitted it."
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the email was recorded as sent in Relay."
+    },
+    "forwarded_from": {
+      "type": "string",
+      "description": "The conversation id this email forwards, when it was created via Forward from the Inbox."
+    },
+    "is_demo": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "restaurant_id"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

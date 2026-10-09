@@ -14,20 +14,20 @@ import { base44 } from "@/api/base44Client";
 import { taskActivity } from "@/lib/taskSource";
 import { useAuth } from "@/lib/AuthContext";
 import { getRestaurantId } from "@/lib/format";
-import RecipientInput from "@/components/RecipientInput";
+import RecipientMultiInput, { parseRecipientText, joinNames, joinEmails, allHaveEmails } from "@/components/RecipientMultiInput";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// A follow-up's email draft: To (with saved-contact suggestions), email
-// address, subject, and body. Drafts are saved in Relay only — Relay never
-// sends email. "Record as sent" records that the manager sent the email
-// themselves from their own inbox; no external email is transmitted.
+// A follow-up's email draft: To (multiple recipients — saved contacts, saved
+// groups, or typed addresses), Cc, Bcc, subject, and body. Drafts are saved
+// in Relay only — Relay never sends email. "Record as sent" records that the
+// manager sent the email themselves from their own inbox; no external email
+// is transmitted.
 export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onRecorded, mode = "draft" }) {
   const { toast } = useToast();
   const { user } = useAuth();
   const restaurantId = getRestaurantId(user);
-  const [recipient, setRecipient] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipients, setRecipients] = useState([]);
+  const [cc, setCc] = useState([]);
+  const [bcc, setBcc] = useState([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [seeded, setSeeded] = useState(null);
@@ -37,8 +37,23 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
 
   if (open && task && seeded !== task.id) {
     setSeeded(task.id);
-    setRecipient(task.draft_recipient || "");
-    setRecipientEmail(task.draft_recipient_email || "");
+    setRecipients(
+      task.draft_recipient_email || task.draft_recipient
+        ? parseRecipientText(
+            (task.draft_recipient_email || "")
+              .split(",")
+              .map((e, i) => {
+                const names = (task.draft_recipient || "").split(",").map((n) => n.trim());
+                const name = names[i] || "";
+                const email = e.trim();
+                return name ? `${name} <${email}>` : email;
+              })
+              .join(", ")
+          )
+        : []
+    );
+    setCc(parseRecipientText(task.draft_cc || ""));
+    setBcc(parseRecipientText(task.draft_bcc || ""));
     setSubject(task.draft_subject || "");
     setBody(task.draft_email || "");
   }
@@ -50,8 +65,10 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
     setSaving(true);
     try {
       const patch = {
-        draft_recipient: recipient.trim(),
-        draft_recipient_email: recipientEmail.trim(),
+        draft_recipient: joinNames(recipients),
+        draft_recipient_email: joinEmails(recipients),
+        draft_cc: joinEmails(cc),
+        draft_bcc: joinEmails(bcc),
         draft_subject: subject.trim(),
         draft_email: body,
         draft_edited: true,
@@ -79,14 +96,27 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
       const res = await base44.functions.invoke("createFollowUp", {
         task_id: task.id,
         regenerate_draft: true,
-        recipient: recipient.trim(),
+        recipient: joinNames(recipients) || (task.draft_recipient || "").split(",")[0].trim(),
       });
       const updated = (res.data && res.data.task) || null;
       if (updated) {
         setSubject(updated.draft_subject || "");
         setBody(updated.draft_email || "");
-        setRecipient(updated.draft_recipient || recipient);
-        setRecipientEmail(updated.draft_recipient_email || recipientEmail);
+        if (updated.draft_recipient_email || updated.draft_recipient) {
+          setRecipients(
+            parseRecipientText(
+              (updated.draft_recipient_email || "")
+                .split(",")
+                .map((e, i) => {
+                  const names = (updated.draft_recipient || "").split(",").map((n) => n.trim());
+                  const name = names[i] || "";
+                  const email = e.trim();
+                  return name ? `${name} <${email}>` : email;
+                })
+                .join(", ")
+            )
+          );
+        }
         if (onSaved) onSaved(updated);
       }
       toast({ title: "Draft regenerated", description: "The manager's instruction and context are preserved — edit freely." });
@@ -99,10 +129,10 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
 
   const recordSent = async () => {
     if (recording) return;
-    if (!EMAIL_RE.test(recipientEmail.trim())) {
+    if (!allHaveEmails(recipients)) {
       toast({
         title: "Email address required",
-        description: "Relay doesn't have a real address for this recipient and won't invent one.",
+        description: "Relay doesn't have a real address for every recipient and won't invent one.",
         variant: "destructive",
       });
       return;
@@ -111,16 +141,19 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
     try {
       const res = await base44.functions.invoke("recordEmailSent", {
         task_id: task.id,
-        to_name: recipient.trim(),
-        to_email: recipientEmail.trim(),
+        recipients: recipients.map((r) => ({ name: r.name || "", email: (r.email || "").trim() })),
+        cc: joinEmails(cc),
+        bcc: joinEmails(bcc),
         subject: subject.trim(),
         body,
       });
       const updated =
         (res.data && res.data.task) || {
           ...task,
-          draft_recipient: recipient.trim(),
-          draft_recipient_email: recipientEmail.trim(),
+          draft_recipient: joinNames(recipients),
+          draft_recipient_email: joinEmails(recipients),
+          draft_cc: joinEmails(cc),
+          draft_bcc: joinEmails(bcc),
           draft_subject: subject.trim(),
           draft_email: body,
           email_recorded_sent: true,
@@ -140,7 +173,8 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
     }
   };
 
-  const emailOk = EMAIL_RE.test(recipientEmail.trim());
+  const busy = saving || recording || regenerating;
+  const emailOk = allHaveEmails(recipients);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,51 +186,42 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">To</Label>
-            <RecipientInput
+            <Label className="text-xs text-muted-foreground">To — type a name or address, or pick a saved contact or group</Label>
+            <RecipientMultiInput
               restaurantId={restaurantId}
-              name={recipient}
-              email={recipientEmail}
-              onNameChange={setRecipient}
-              onEmailChange={setRecipientEmail}
-              disabled={saving || recording || regenerating}
-              placeholder="e.g. Keith, Banquet Manager"
+              value={recipients}
+              onChange={setRecipients}
+              disabled={busy}
+              placeholder="e.g. Keith, All Managers, keith@example.com"
               autoFocus
             />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Email address</Label>
-            <Input
-              type="email"
-              value={recipientEmail}
-              onChange={(e) => setRecipientEmail(e.target.value)}
-              placeholder="e.g. keith@example.com"
-              disabled={saving || recording || regenerating}
-            />
-            {recipient.trim() && !recipientEmail.trim() && (
+            {recipients.some((r) => !r.email) && (
               <p className="text-xs text-amber-700">
-                Email address required — Relay doesn't have one for {recipient.trim()} and won't invent it. Enter the
-                real address before this email can be recorded as sent.
+                Email address required — Relay doesn't have a real address for every recipient and won't invent one.
+                Enter the addresses before this email can be recorded as sent.
               </p>
             )}
           </div>
           <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Cc</Label>
+            <RecipientMultiInput restaurantId={restaurantId} value={cc} onChange={setCc} disabled={busy} placeholder="Add cc recipients" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Bcc</Label>
+            <RecipientMultiInput restaurantId={restaurantId} value={bcc} onChange={setBcc} disabled={busy} placeholder="Add bcc recipients" />
+          </div>
+          <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Subject</Label>
-            <Input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Subject"
-              disabled={saving || recording || regenerating}
-            />
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" disabled={busy} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Email body</Label>
             <textarea
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm min-h-[220px] resize-y leading-relaxed"
+              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm min-h-[200px] resize-y leading-relaxed"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="The email body…"
-              disabled={saving || recording || regenerating}
+              disabled={busy}
             />
           </div>
           <p className="text-xs text-muted-foreground flex items-start gap-1.5">
@@ -207,7 +232,7 @@ export default function TaskDraftDialog({ open, onOpenChange, task, onSaved, onR
           </p>
         </div>
         <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
-          <Button variant="outline" size="sm" onClick={regenerate} disabled={regenerating || saving || recording}>
+          <Button variant="outline" size="sm" onClick={regenerate} disabled={busy}>
             {regenerating ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Regenerating…

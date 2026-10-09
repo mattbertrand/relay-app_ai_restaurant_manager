@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import StatusBadge from "@/components/StatusBadge";
 import AnalysisPanel from "@/components/AnalysisPanel";
 import AttentionReply from "@/components/AttentionReply";
@@ -8,7 +8,7 @@ import PreviousAnalysis from "@/components/PreviousAnalysis";
 import SaveContactButton from "@/components/SaveContactButton";
 import ReanalyzeButton from "@/components/ReanalyzeButton";
 import { Button } from "@/components/ui/button";
-import { Mail, Archive, AlertCircle, Undo2, Loader2 } from "lucide-react";
+import { Mail, Archive, AlertCircle, Undo2, Loader2, Forward } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { categoryLabel } from "@/lib/classification";
 import { effectiveWorkflow, effectiveResponse } from "@/lib/workflowStatus";
@@ -28,6 +28,7 @@ const WORKFLOW_BADGE = {
 // is the state of the message itself — separate from the related opportunity's
 // New → In Progress → Resolved lifecycle.
 export default function ConversationCard({ convo, isLive, highlighted, onArchive, onCorrect, onSaveReplyDraft, onMarkReplied, onMoveToNew, replyBusy, onReanalyzed }) {
+  const navigate = useNavigate();
   const showActions = isLive;
   const showDraft =
     isLive && ["Attention", "Administrative"].includes(convo.analysis_status) && !!convo.draft_response;
@@ -141,6 +142,14 @@ export default function ConversationCard({ convo, isLive, highlighted, onArchive
 
           {showActions && (
             <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => navigate(`/compose?forward=${convo.id}`)}
+              >
+                <Forward className="w-3.5 h-3.5 mr-1.5" /> Forward
+              </Button>
               {convo.status !== "Archived" && (
                 <Button
                   variant="ghost"

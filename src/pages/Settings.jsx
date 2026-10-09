@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import GmailIntegrationCard from "@/components/GmailIntegrationCard";
 import ContactsEditor from "@/components/contacts/ContactsEditor";
+import GroupsEditor from "@/components/GroupsEditor";
 import { getRestaurantId } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
-  Store, Users, Bell, MessageSquare, ShieldCheck, User as UserIcon,
+  Store, Users, UsersRound, Bell, MessageSquare, ShieldCheck, User as UserIcon,
   Mail, Calendar, Phone, Globe, Instagram, Facebook, Save, Loader2, Check,
   BookOpen, ArrowRight,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import { setUnsavedChanges, clearUnsavedChanges } from "@/lib/unsavedChanges";
 const TABS = [
   { label: "Restaurant", icon: Store },
   { label: "Team", icon: Users },
+  { label: "Groups", icon: UsersRound },
   { label: "Notifications", icon: Bell },
   { label: "Communication", icon: MessageSquare },
   { label: "Approvals", icon: ShieldCheck },
@@ -228,6 +230,14 @@ export default function Settings() {
             <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">Owner</span>
           </div>
           <ContactsEditor restaurantId={getRestaurantId(user)} teamOnly />
+        </div>
+      )}
+
+      {tab === "Groups" && (
+        <div className="bg-card rounded-xl border border-border p-6">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-1">Contact Groups</h2>
+          <p className="text-sm text-muted-foreground mb-5">Named groups — like "All Managers" — Relay suggests when you email several people at once.</p>
+          <GroupsEditor restaurantId={getRestaurantId(user)} />
         </div>
       )}
 

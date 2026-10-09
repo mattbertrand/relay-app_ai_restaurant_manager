@@ -1,0 +1,39 @@
+{
+  "name": "ContactGroup",
+  "type": "object",
+  "description": "A named, saved email group in the restaurant's contact directory (e.g. 'All Managers', 'Vendors'). The manager picks who belongs to each group; Relay suggests groups wherever several recipients are chosen at once. Groups expand to their saved contacts' real email addresses \u2014 never invented.",
+  "properties": {
+    "restaurant_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "description": "The group's name, e.g. 'All Managers'."
+    },
+    "member_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The Contact record ids that belong to this group. Members resolve to their real email addresses when the group is used."
+    }
+  },
+  "required": [
+    "restaurant_id",
+    "name"
+  ],
+  "rls": {
+    "read": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "create": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "update": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    },
+    "delete": {
+      "data.restaurant_id": "{{user.data.restaurant_id}}"
+    }
+  }
+}

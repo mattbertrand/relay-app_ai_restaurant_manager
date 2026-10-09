@@ -3,18 +3,19 @@ import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { getRestaurantId, getInitials, setActiveTimezone, todayInTimezone } from "@/lib/format";
 import { base44 } from "@/api/base44Client";
-import { Sun, Target, Inbox, Star, CheckSquare, Settings, LogOut, Menu, X, ClipboardList } from "lucide-react";
+import { Sun, Target, Inbox, Star, CheckSquare, Settings, LogOut, Menu, X, ClipboardList, PenLine } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import UnsavedChangesGuard from "@/components/UnsavedChangesGuard";
 
-const ICON_MAP = { Sun, Target, Inbox, Star, CheckSquare, Settings, ClipboardList };
+const ICON_MAP = { Sun, Target, Inbox, Star, CheckSquare, Settings, ClipboardList, PenLine };
 
 const NAV_ITEMS = [
   { label: "Today", path: "/today", icon: "Sun" },
   { label: "Opportunities", path: "/opportunities", icon: "Target", countKey: "opportunities" },
   { label: "Inbox", path: "/inbox", icon: "Inbox", countKey: "inbox" },
+  { label: "Compose", path: "/compose", icon: "PenLine" },
   { label: "Reviews", path: "/reviews", icon: "Star", countKey: "reviews" },
   { label: "Tasks", path: "/tasks", icon: "ClipboardList", countKey: "tasks" },
   { label: "Actions", path: "/actions", icon: "CheckSquare" },

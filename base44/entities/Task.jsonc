@@ -108,11 +108,19 @@
     },
     "draft_recipient": {
       "type": "string",
-      "description": "Who the task's draft email is addressed to \u2014 a person, role, or team (e.g. 'Banquet Manager', 'Josh')."
+      "description": "Who the task's draft email is addressed to \u2014 a person, role, or team (e.g. 'Banquet Manager', 'Josh'), or several people comma-separated."
     },
     "draft_recipient_email": {
       "type": "string",
-      "description": "The recipient's actual email address, when one is known \u2014 resolved from saved contacts or entered by the manager. Never invented: a draft whose recipient has no known address is shown as needing one before it could ever be sent."
+      "description": "The recipients' actual email addresses, comma-separated when there are several \u2014 resolved from saved contacts or entered by the manager. Never invented: a draft whose recipients have no known addresses is shown as needing one before it could ever be sent."
+    },
+    "draft_cc": {
+      "type": "string",
+      "description": "Cc recipients' real email addresses, comma-separated. Empty when none \u2014 never invented."
+    },
+    "draft_bcc": {
+      "type": "string",
+      "description": "Bcc recipients' real email addresses, comma-separated. Empty when none \u2014 never invented."
     },
     "draft_edited": {
       "type": "boolean",
@@ -131,11 +139,11 @@
     },
     "email_recorded_to": {
       "type": "string",
-      "description": "Who the recorded-as-sent email went to (name/role)."
+      "description": "Who the recorded-as-sent email went to (names/roles, comma-separated when several)."
     },
     "email_recorded_to_email": {
       "type": "string",
-      "description": "The real email address the recorded-as-sent email went to."
+      "description": "The real email addresses the recorded-as-sent email went to, comma-separated when several."
     },
     "email_recorded_subject": {
       "type": "string",
